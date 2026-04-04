@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Projects</title>
+  <title>项目归档</title>
   <style>
     :root {
       --bg: #f4f6f8;
@@ -13,6 +13,7 @@
       --line: #e2e8f0;
       --accent: #fc5531;
       --accent-dark: #d94323;
+      --tag-bg: #fff1ec;
     }
     * { box-sizing: border-box; }
     body {
@@ -93,7 +94,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      min-height: 200px;
+      min-height: 220px;
     }
     .content {
       padding: 24px 24px 24px 0;
@@ -115,6 +116,22 @@
       margin: 0 0 18px;
       color: var(--muted);
       line-height: 1.8;
+    }
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--tag-bg);
+      color: var(--accent-dark);
+      font-size: 0.88rem;
+      font-weight: 700;
     }
     .link {
       color: var(--accent);
@@ -142,18 +159,18 @@
 <body>
   <header>
     <div class="bar">
-      <a class="brand" href="/">Robotics Blog</a>
+      <a class="brand" href="/">机器人博客</a>
       <nav class="nav">
-        <a href="/projects.html">Projects</a>
-        <a href="/admin.html">Admin</a>
+        <a href="/projects">项目归档</a>
+        <a href="/admin-login">后台登录</a>
       </nav>
     </div>
   </header>
 
   <main class="wrap">
     <section class="hero">
-      <h1>Project Archive</h1>
-      <p>Recent robotics and AI system notes, written in a CSDN-style card layout. Open any project for the full writeup.</p>
+      <h1>项目归档</h1>
+      <p>这里整理了我的机器人、视觉与 AI 项目文章。每个项目都包含摘要、封面和完整正文；如果配置了演示视频，也会在详情页中直接展示。</p>
     </section>
 
     <section id="projects-list" class="list"></section>
@@ -164,17 +181,17 @@
 
     async function loadProjects() {
       const container = document.getElementById("projects-list");
-      container.innerHTML = "<div class='empty'>Loading projects...</div>";
+      container.innerHTML = "<div class='empty'>正在加载项目...</div>";
 
       try {
         const response = await fetch(`${API_BASE}/api/projects`);
         if (!response.ok) {
-          throw new Error("Failed to fetch projects.");
+          throw new Error("加载项目失败。");
         }
         const projects = await response.json();
 
         if (!projects.length) {
-          container.innerHTML = "<div class='empty'>No projects published yet.</div>";
+          container.innerHTML = "<div class='empty'>暂时还没有已发布的项目。</div>";
           return;
         }
 
@@ -182,10 +199,13 @@
           <article class="card">
             <img src="${project.coverImage}" alt="${project.title}">
             <div class="content">
-              <div class="meta">${project.date}</div>
+              <div class="meta">${project.date || "未设置日期"}</div>
               <h2 class="title">${project.title}</h2>
               <p class="summary">${project.summary}</p>
-              <a class="link" href="/project-detail.html?id=${project.id}">Read full project</a>
+              <div class="tags">
+                ${project.videoUrl ? '<span class="tag">含演示视频</span>' : '<span class="tag">图文项目</span>'}
+              </div>
+              <a class="link" href="/project/${project.id}">查看全文</a>
             </div>
           </article>
         `).join("");

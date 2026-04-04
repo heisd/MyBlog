@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Login</title>
+  <title>后台登录</title>
   <style>
     :root {
       --bg: #f4f1ea;
@@ -105,26 +105,26 @@
 <body>
   <main class="card">
     <div class="eyebrow">Admin Access</div>
-    <h1>Sign in to manage projects</h1>
-    <p>Use your administrator username and password to create, edit, or remove posts.</p>
+    <h1>后台登录</h1>
+    <p>请输入管理员用户名和密码。登录后你可以新增、编辑和删除项目内容，也可以为项目添加演示视频链接。</p>
 
     <form id="login-form">
       <label>
-        Username
+        用户名
         <input id="username" name="username" autocomplete="username" required>
       </label>
 
       <label>
-        Password
+        密码
         <input id="password" name="password" type="password" autocomplete="current-password" required>
       </label>
 
-      <button type="submit">Log in</button>
+      <button type="submit">登录后台</button>
     </form>
 
-    <div id="message" class="message">Ready.</div>
+    <div id="message" class="message">请输入登录信息。</div>
     <div class="links">
-      <a href="/projects.html">Back to projects</a>
+      <a href="/projects">返回项目列表</a>
     </div>
   </main>
 
@@ -148,14 +148,14 @@
           headers: { Authorization: `Bearer ${token}` }
         });
         if (response.ok) {
-          window.location.href = "/admin.html";
+          window.location.href = "/admin";
         }
       } catch {}
     }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      setMessage("Signing in...");
+      setMessage("正在登录...");
 
       try {
         const response = await fetch(`${API_BASE}/api/auth/login`, {
@@ -169,11 +169,11 @@
 
         const result = await response.json();
         if (!response.ok) {
-          throw new Error(result.message || "Login failed.");
+          throw new Error(result.message || "登录失败。");
         }
 
         localStorage.setItem(AUTH_TOKEN_KEY, result.token);
-        window.location.href = "/admin.html";
+        window.location.href = "/admin";
       } catch (error) {
         setMessage(error.message, true);
       }

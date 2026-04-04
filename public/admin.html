@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Projects Admin</title>
+  <title>项目后台管理</title>
   <style>
     :root {
       --bg: #eef2f7;
@@ -47,7 +47,7 @@
     }
     .grid {
       display: grid;
-      grid-template-columns: 1fr 0.9fr;
+      grid-template-columns: 1fr 0.95fr;
       gap: 22px;
     }
     .panel {
@@ -110,6 +110,31 @@
       min-height: 24px;
       color: var(--muted);
     }
+    .hint {
+      margin: -4px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+    .upload-row {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      background: #f8fafc;
+    }
+    .upload-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .upload-status {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
     .project-list {
       display: grid;
       gap: 14px;
@@ -128,6 +153,22 @@
       margin: 0;
       color: var(--muted);
       line-height: 1.7;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 700;
     }
     .project-card .card-actions {
       display: flex;
@@ -149,46 +190,61 @@
   <main class="wrap">
     <div class="topbar">
       <div>
-        <h1>Projects Admin</h1>
-        <p class="message" id="message">Ready.</p>
+        <h1>项目后台管理</h1>
+        <p class="message" id="message">已进入后台，可以开始管理项目。</p>
       </div>
       <div class="topbar-actions">
-        <a href="/projects.html">View published projects</a>
-        <button class="secondary" type="button" id="logout-button">Log out</button>
+        <a href="/projects">查看前台项目</a>
+        <button class="secondary" type="button" id="logout-button">退出登录</button>
       </div>
     </div>
 
     <div class="grid">
       <section class="panel">
-        <h2 id="form-title">Create Project</h2>
+        <h2 id="form-title">新建项目</h2>
         <form id="project-form">
           <label>
-            Title
+            标题
             <input id="title" name="title" required>
           </label>
           <label>
-            Summary
+            摘要
             <textarea id="summary" name="summary" required></textarea>
           </label>
           <label>
-            Cover image URL
+            封面图片链接
             <input id="coverImage" name="coverImage" type="url" required>
           </label>
           <label>
-            Full content (HTML allowed)
+            视频链接（可选）
+            <input id="videoUrl" name="videoUrl" type="url" placeholder="支持 mp4 / webm 直链，或可嵌入视频链接">
+          </label>
+          <div class="upload-row">
+            <label>
+              本地视频文件（可选）
+              <input id="videoFile" name="videoFile" type="file" accept="video/*">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="upload-video-button">上传本地视频</button>
+              <span id="upload-status" class="upload-status">如果你想直接使用电脑里的视频，请先选择文件再点击上传。</span>
+            </div>
+          </div>
+          <p class="hint">如果填写视频链接，项目详情页会自动显示“项目演示视频”模块。</p>
+          <label>
+            正文内容（支持 HTML）
             <textarea id="content" name="content" required></textarea>
           </label>
           <div class="actions">
-            <button class="primary" type="submit">Save Project</button>
-            <button class="secondary" type="button" id="reset-button">Reset</button>
+            <button class="primary" type="submit">保存项目</button>
+            <button class="secondary" type="button" id="reset-button">重置表单</button>
           </div>
         </form>
       </section>
 
       <section class="panel">
-        <h2>Existing Projects</h2>
+        <h2>现有项目</h2>
         <div id="project-list" class="project-list">
-          <div class="project-card"><p>Loading projects...</p></div>
+          <div class="project-card"><p>正在加载项目...</p></div>
         </div>
       </section>
     </div>
@@ -203,6 +259,8 @@
     const formTitle = document.getElementById("form-title");
     const resetButton = document.getElementById("reset-button");
     const logoutButton = document.getElementById("logout-button");
+    const uploadVideoButton = document.getElementById("upload-video-button");
+    const uploadStatus = document.getElementById("upload-status");
     let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
@@ -211,16 +269,17 @@
       message.style.color = isError ? "#b91c1c" : "#64748b";
     }
 
-    function resetForm(statusText = "Ready.") {
+    function resetForm(statusText = "已进入后台，可以开始管理项目。") {
       editingId = null;
       form.reset();
-      formTitle.textContent = "Create Project";
+      formTitle.textContent = "新建项目";
+      uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
       setMessage(statusText);
     }
 
     function redirectToLogin() {
       localStorage.removeItem(AUTH_TOKEN_KEY);
-      window.location.href = "/admin-login.html";
+      window.location.href = "/admin-login";
     }
 
     async function authFetch(url, options = {}) {
@@ -236,7 +295,7 @@
 
       if (response.status === 401) {
         redirectToLogin();
-        throw new Error("Authentication required.");
+        throw new Error("登录状态已失效，请重新登录。");
       }
 
       return response;
@@ -260,7 +319,7 @@
     async function fetchProjects() {
       const response = await authFetch(`${API_BASE}/api/projects`);
       if (!response.ok) {
-        throw new Error("Failed to load projects.");
+        throw new Error("加载项目失败。");
       }
       return response.json();
     }
@@ -268,7 +327,7 @@
     async function fetchProject(id) {
       const response = await authFetch(`${API_BASE}/api/projects/${id}`);
       if (!response.ok) {
-        throw new Error("Failed to load project details.");
+        throw new Error("加载项目详情失败。");
       }
       return response.json();
     }
@@ -277,24 +336,53 @@
       try {
         const projects = await fetchProjects();
         if (!projects.length) {
-          projectList.innerHTML = "<div class='project-card'><p>No projects yet.</p></div>";
+          projectList.innerHTML = "<div class='project-card'><p>还没有项目。</p></div>";
           return;
         }
 
         projectList.innerHTML = projects.map((project) => `
           <article class="project-card">
-            <div>${project.date || ""}</div>
+            <div class="meta-row">
+              <span>${project.date || "未设置日期"}</span>
+              <span class="meta-pill">${project.videoUrl ? "含视频" : "无视频"}</span>
+            </div>
             <h3>${project.title}</h3>
             <p>${project.summary}</p>
             <div class="card-actions">
-              <button class="secondary" data-action="edit" data-id="${project.id}">Edit</button>
-              <button class="danger" data-action="delete" data-id="${project.id}">Delete</button>
+              <button class="secondary" data-action="edit" data-id="${project.id}">编辑</button>
+              <button class="danger" data-action="delete" data-id="${project.id}">删除</button>
             </div>
           </article>
         `).join("");
       } catch (error) {
         projectList.innerHTML = `<div class="project-card"><p>${error.message}</p></div>`;
       }
+    }
+
+    async function uploadSelectedVideo() {
+      const fileInput = form.videoFile;
+      const file = fileInput.files[0];
+      if (!file) {
+        throw new Error("请先选择一个本地视频文件。");
+      }
+
+      uploadStatus.textContent = `正在上传：${file.name}`;
+      const formData = new FormData();
+      formData.append("video", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/video`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "视频上传失败。");
+      }
+
+      form.videoUrl.value = result.videoUrl;
+      uploadStatus.textContent = "视频上传成功，链接已自动填入。";
+      return result.videoUrl;
     }
 
     form.addEventListener("submit", async (event) => {
@@ -304,6 +392,7 @@
         title: form.title.value.trim(),
         summary: form.summary.value.trim(),
         coverImage: form.coverImage.value.trim(),
+        videoUrl: form.videoUrl.value.trim(),
         content: form.content.value.trim()
       };
 
@@ -318,10 +407,10 @@
         });
         const result = await response.json();
         if (!response.ok) {
-          throw new Error(result.message || "Request failed.");
+          throw new Error(result.message || "请求失败。");
         }
 
-        resetForm(editingId ? "Project updated." : "Project created.");
+        resetForm(editingId ? "项目已更新。" : "项目已创建。");
         await renderProjects();
       } catch (error) {
         setMessage(error.message, true);
@@ -329,6 +418,14 @@
     });
 
     resetButton.addEventListener("click", () => resetForm());
+    uploadVideoButton.addEventListener("click", async () => {
+      try {
+        await uploadSelectedVideo();
+      } catch (error) {
+        uploadStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
 
     logoutButton.addEventListener("click", async () => {
       try {
@@ -348,12 +445,14 @@
         try {
           const project = await fetchProject(id);
           editingId = project.id;
-          formTitle.textContent = "Edit Project";
+          formTitle.textContent = "编辑项目";
           form.title.value = project.title;
           form.summary.value = project.summary;
           form.coverImage.value = project.coverImage;
+          form.videoUrl.value = project.videoUrl || "";
           form.content.value = project.content;
-          setMessage(`Editing "${project.title}".`);
+          uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
+          setMessage(`正在编辑《${project.title}》。`);
           window.scrollTo({ top: 0, behavior: "smooth" });
         } catch (error) {
           setMessage(error.message, true);
@@ -361,19 +460,19 @@
       }
 
       if (action === "delete") {
-        const confirmed = window.confirm("Delete this project?");
+        const confirmed = window.confirm("确定要删除这个项目吗？");
         if (!confirmed) return;
 
         try {
           const response = await authFetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
           const result = await response.json();
           if (!response.ok) {
-            throw new Error(result.message || "Delete failed.");
+            throw new Error(result.message || "删除失败。");
           }
           if (editingId === id) {
             resetForm();
           }
-          setMessage("Project deleted.");
+          setMessage("项目已删除。");
           await renderProjects();
         } catch (error) {
           setMessage(error.message, true);

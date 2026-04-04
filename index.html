@@ -1,940 +1,134 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Heisd.Stark | Personal Blog</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>机器人技术博客</title>
   <style>
     :root {
-      --bg: #ffffff;
-      --text: #222222;
-      --muted: #646464;
-      --line: rgba(34, 34, 34, 0.1);
-      --study-overlay: #d9d9d9;
-      --surface: #f5f5f5;
-      --shadow: 0 24px 70px rgba(34, 34, 34, 0.12);
-      --radius-lg: 32px;
-      --radius-md: 24px;
-      --radius-sm: 18px;
-      --container: min(1180px, calc(100vw - 48px));
+      --bg: #f5f1e8;
+      --paper: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6a625b;
+      --accent: #d86d2a;
+      --accent-dark: #9f4716;
+      --line: #e6ded2;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Open Sans", sans-serif;
-      color: var(--text);
-      background: var(--bg);
-      line-height: 1.7;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-    }
-
-    img {
-      display: block;
-      max-width: 100%;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    button {
-      font: inherit;
-    }
-
-    .page-shell {
-      position: relative;
-      overflow-x: clip;
-    }
-
-    .page-shell::before,
-    .page-shell::after {
-      content: "";
-      position: fixed;
-      inset: auto;
-      width: 320px;
-      height: 320px;
-      border-radius: 50%;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
       background:
-        radial-gradient(circle, rgba(34, 34, 34, 0.06) 0%, rgba(34, 34, 34, 0) 70%);
-      z-index: -1;
-      pointer-events: none;
+        radial-gradient(circle at top left, rgba(216,109,42,0.15), transparent 25%),
+        linear-gradient(180deg, #f6f1e9 0%, var(--bg) 100%);
     }
-
-    .page-shell::before {
-      top: -140px;
-      left: -120px;
-    }
-
-    .page-shell::after {
-      right: -120px;
-      bottom: 12%;
-    }
-
-    .container {
-      width: var(--container);
+    .hero {
+      max-width: 1100px;
       margin: 0 auto;
-    }
-
-    .site-header {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      backdrop-filter: blur(18px);
-      background: rgba(255, 255, 255, 0.8);
-      border-bottom: 1px solid rgba(34, 34, 34, 0.06);
-    }
-
-    .nav {
-      display: flex;
+      padding: 72px 24px 48px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 32px;
+      min-height: 100vh;
       align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-      min-height: 82px;
     }
-
-    .brand {
-      font-family: "Montserrat", sans-serif;
-      font-size: 1rem;
-      font-weight: 800;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 18px;
-      font-size: 0.92rem;
-      color: var(--muted);
-    }
-
-    .nav-links a {
-      position: relative;
-      padding-bottom: 4px;
-      transition: color 180ms ease;
-    }
-
-    .nav-links a::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      bottom: 0;
-      width: 100%;
-      height: 1px;
-      background: var(--text);
-      transform: scaleX(0);
-      transform-origin: left;
-      transition: transform 180ms ease;
-    }
-
-    .nav-links a:hover {
-      color: var(--text);
-    }
-
-    .nav-links a:hover::after {
-      transform: scaleX(1);
-    }
-
-    section {
-      padding: 110px 0;
-    }
-
     .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 20px;
-      font-size: 0.82rem;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .eyebrow::before {
-      content: "";
-      width: 34px;
-      height: 1px;
-      background: currentColor;
-      opacity: 0.7;
-    }
-
-    h1,
-    h2,
-    h3,
-    h4 {
-      margin: 0;
-      font-family: "Montserrat", sans-serif;
-      color: var(--text);
-      line-height: 1.05;
-    }
-
-    h1 {
-      font-size: clamp(3rem, 8vw, 6rem);
-      letter-spacing: -0.05em;
-    }
-
-    h2 {
-      font-size: clamp(2.3rem, 5vw, 3.8rem);
-      letter-spacing: -0.04em;
-    }
-
-    h3 {
-      font-size: clamp(1.25rem, 3vw, 1.65rem);
-      letter-spacing: -0.03em;
-    }
-
-    p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 1rem;
-    }
-
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1.24fr 0.96fr;
-      gap: 34px;
-      align-items: stretch;
-    }
-
-    .panel {
-      background: #fff;
-      border: 1px solid rgba(34, 34, 34, 0.06);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-    }
-
-    .hero-card {
-      min-height: 720px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding: 42px;
-      position: relative;
-      isolation: isolate;
-      color: #fff;
-      background:
-        linear-gradient(180deg, rgba(34, 34, 34, 0.02) 0%, rgba(34, 34, 34, 0.78) 100%),
-        url("https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400") center/cover no-repeat;
-    }
-
-    .hero-card::after {
-      content: "";
-      position: absolute;
-      inset: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 24px;
-      z-index: -1;
-    }
-
-    .hero-card .eyebrow,
-    .hero-card p {
-      color: rgba(255, 255, 255, 0.84);
-    }
-
-    .hero-copy {
-      max-width: 450px;
-      display: grid;
-      gap: 18px;
-    }
-
-    .hero-subtitle {
-      font-family: "Montserrat", sans-serif;
-      font-weight: 600;
-      font-size: 0.96rem;
       letter-spacing: 0.24em;
       text-transform: uppercase;
+      color: var(--accent-dark);
+      font-size: 12px;
+      margin-bottom: 16px;
     }
-
-    .btn {
+    h1 {
+      font-size: clamp(2.8rem, 6vw, 5.3rem);
+      line-height: 0.95;
+      margin: 0 0 20px;
+      max-width: 8ch;
+    }
+    p {
+      font-size: 1.05rem;
+      line-height: 1.9;
+      color: var(--muted);
+      max-width: 60ch;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: fit-content;
-      min-width: 170px;
-      min-height: 54px;
-      padding: 0 26px;
-      margin-top: 12px;
-      border: 1px solid var(--text);
+      padding: 14px 22px;
       border-radius: 999px;
-      background: var(--text);
-      color: #fff;
-      font-family: "Montserrat", sans-serif;
+      text-decoration: none;
       font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      transition:
-        transform 180ms ease,
-        box-shadow 180ms ease,
-        background 180ms ease,
-        color 180ms ease;
+      transition: transform 180ms ease, box-shadow 180ms ease;
     }
-
-    .btn:hover {
+    .button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 12px 30px rgba(34, 34, 34, 0.18);
-      background: #fff;
-      color: var(--text);
+      box-shadow: 0 12px 30px rgba(31, 31, 31, 0.1);
     }
-
-    .welcome-card {
-      min-height: 720px;
-      padding: 42px;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      gap: 28px;
-      background:
-        linear-gradient(135deg, rgba(34, 34, 34, 0.03) 0%, rgba(34, 34, 34, 0.08) 100%),
-        #fff;
+    .button-primary {
+      background: var(--accent);
+      color: white;
     }
-
-    .welcome-top {
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
-      align-items: flex-start;
+    .button-secondary {
+      color: var(--ink);
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.75);
     }
-
-    .welcome-top p {
-      max-width: 190px;
-      font-size: 0.96rem;
-      color: var(--muted);
+    .panel {
+      background: rgba(255,253,248,0.82);
+      border: 1px solid rgba(230,222,210,0.95);
+      border-radius: 28px;
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(53, 41, 30, 0.08);
+      backdrop-filter: blur(4px);
     }
-
-    .welcome-visual {
-      display: grid;
-      align-content: center;
-      gap: 28px;
+    .panel h2 {
+      margin-top: 0;
+      font-size: 1.3rem;
     }
-
-    .portrait-circle {
-      width: min(72%, 360px);
-      aspect-ratio: 1;
-      margin-left: auto;
-      border-radius: 50%;
-      overflow: hidden;
-      border: 14px solid #fff;
-      box-shadow: 0 24px 60px rgba(34, 34, 34, 0.16);
-    }
-
-    .portrait-circle img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .welcome-text {
-      max-width: 360px;
-      display: grid;
-      gap: 14px;
-    }
-
-    .about-grid {
-      display: grid;
-      grid-template-columns: 0.9fr 1.1fr;
-      gap: 42px;
-      align-items: center;
-    }
-
-    .about-image {
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      min-height: 520px;
-    }
-
-    .about-image img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .about-copy {
-      display: grid;
-      gap: 22px;
-      max-width: 620px;
-    }
-
-    .lead {
-      font-size: clamp(1.2rem, 2vw, 1.56rem);
-      line-height: 1.75;
-      color: var(--text);
-    }
-
-    .study-section {
-      position: relative;
-      min-height: 620px;
-      display: grid;
-      place-items: center;
-      background:
-        linear-gradient(180deg, rgba(34, 34, 34, 0.18) 0%, rgba(34, 34, 34, 0.54) 100%),
-        url("https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1200") center/cover no-repeat;
-    }
-
-    .study-box {
-      width: min(540px, calc(100vw - 72px));
-      min-height: 220px;
-      padding: 48px 36px;
-      display: grid;
-      place-items: center;
-      border-radius: var(--radius-lg);
-      background: rgba(217, 217, 217, 0.88);
-      backdrop-filter: blur(10px);
-      box-shadow: 0 20px 60px rgba(34, 34, 34, 0.18);
-    }
-
-    .study-box h2 {
-      font-size: clamp(2.6rem, 7vw, 5rem);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .projects-grid {
-      display: grid;
-      grid-template-columns: 0.92fr 1.08fr;
-      gap: 34px;
-      align-items: stretch;
-    }
-
-    .project-list-card,
-    .topics-card {
-      padding: 40px;
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      border: 1px solid rgba(34, 34, 34, 0.06);
-    }
-
-    .project-list-card {
-      display: grid;
-      gap: 28px;
-      align-content: start;
-    }
-
-    .project-list {
-      display: grid;
-      gap: 18px;
-      padding: 0;
+    .panel ul {
+      padding-left: 18px;
       margin: 0;
-      list-style: none;
-      counter-reset: project-step;
-    }
-
-    .project-list li {
-      display: grid;
-      grid-template-columns: 66px 1fr;
-      gap: 18px;
-      align-items: start;
-      padding-top: 18px;
-      border-top: 1px solid rgba(34, 34, 34, 0.1);
-      color: var(--text);
-    }
-
-    .project-list li:first-child {
-      padding-top: 0;
-      border-top: none;
-    }
-
-    .project-list li::before {
-      counter-increment: project-step;
-      content: counter(project-step, decimal-leading-zero);
-      font-family: "Montserrat", sans-serif;
-      font-size: 0.9rem;
-      font-weight: 700;
-      letter-spacing: 0.18em;
       color: var(--muted);
-      padding-top: 2px;
+      line-height: 1.8;
     }
-
-    .project-item-title {
-      font-family: "Montserrat", sans-serif;
-      font-size: 1.08rem;
-      font-weight: 700;
-      line-height: 1.4;
-    }
-
-    .project-media-grid {
-      min-height: 680px;
-      display: grid;
-      grid-template-columns: 1.08fr 0.92fr;
-      gap: 20px;
-    }
-
-    .media-tall,
-    .media-stack > div {
-      overflow: hidden;
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow);
-    }
-
-    .media-tall img,
-    .media-stack img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform 600ms ease;
-    }
-
-    .media-tall:hover img,
-    .media-stack > div:hover img {
-      transform: scale(1.03);
-    }
-
-    .media-stack {
-      display: grid;
-      grid-template-rows: 0.9fr 1.1fr;
-      gap: 20px;
-    }
-
-    .topics-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 22px;
-      align-items: stretch;
-    }
-
-    .topic-card {
-      padding: 34px 28px;
-      border-radius: var(--radius-md);
-      border: 1px solid rgba(34, 34, 34, 0.08);
-      background: #fff;
-      display: grid;
-      gap: 16px;
-      min-height: 260px;
-      box-shadow: 0 20px 45px rgba(34, 34, 34, 0.08);
-    }
-
-    .topic-card p {
-      font-size: 0.97rem;
-    }
-
-    .topic-list {
-      display: grid;
-      gap: 12px;
-      color: var(--text);
-    }
-
-    .topic-list span {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      color: var(--muted);
-    }
-
-    .contact-section {
-      position: relative;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.9) 100%),
-        url("https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1200") center/cover no-repeat;
-    }
-
-    .contact-card {
-      max-width: 720px;
-      padding: 48px;
-      border-radius: var(--radius-lg);
-      background: rgba(255, 255, 255, 0.86);
-      border: 1px solid rgba(34, 34, 34, 0.08);
-      backdrop-filter: blur(12px);
-      box-shadow: var(--shadow);
-    }
-
-    .contact-copy {
-      display: grid;
-      gap: 22px;
-    }
-
-    .contact-meta {
-      display: grid;
-      gap: 14px;
-      padding-top: 8px;
-    }
-
-    .contact-line {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: baseline;
-      color: var(--text);
-    }
-
-    .contact-label {
-      min-width: 80px;
-      font-family: "Montserrat", sans-serif;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-size: 0.88rem;
-      color: var(--muted);
-    }
-
-    .contact-value {
-      font-size: 1.08rem;
-      color: var(--text);
-      word-break: break-word;
-    }
-
-    .site-footer {
-      padding: 36px 0 52px;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .fade-up {
-      opacity: 0;
-      transform: translateY(22px);
-      animation: fadeUp 800ms ease forwards;
-    }
-
-    .delay-1 {
-      animation-delay: 120ms;
-    }
-
-    .delay-2 {
-      animation-delay: 240ms;
-    }
-
-    .delay-3 {
-      animation-delay: 360ms;
-    }
-
-    @keyframes fadeUp {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @media (max-width: 1040px) {
-      section {
-        padding: 92px 0;
-      }
-
-      .hero-grid,
-      .about-grid,
-      .projects-grid,
-      .topics-grid {
+    @media (max-width: 860px) {
+      .hero {
         grid-template-columns: 1fr;
-      }
-
-      .hero-card,
-      .welcome-card {
         min-height: auto;
-      }
-
-      .welcome-visual {
-        justify-items: start;
-      }
-
-      .portrait-circle {
-        margin-left: 0;
-        width: min(64vw, 320px);
-      }
-
-      .project-media-grid {
-        min-height: auto;
-      }
-
-      .topic-card {
-        min-height: auto;
-      }
-    }
-
-    @media (max-width: 720px) {
-      :root {
-        --container: min(100vw - 32px, 1180px);
-      }
-
-      .nav {
-        min-height: 74px;
-        align-items: flex-start;
-        padding: 16px 0;
-      }
-
-      .nav-links {
-        gap: 12px;
-        font-size: 0.84rem;
-      }
-
-      .hero-card,
-      .welcome-card,
-      .project-list-card,
-      .topics-card,
-      .contact-card {
-        padding: 28px;
-      }
-
-      .hero-card::after {
-        inset: 14px;
-      }
-
-      .about-image {
-        min-height: 400px;
-      }
-
-      .study-section {
-        min-height: 480px;
-      }
-
-      .study-box {
-        min-height: 180px;
-        padding: 36px 24px;
-      }
-
-      .project-media-grid,
-      .media-stack {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto;
-      }
-
-      .media-tall,
-      .media-stack > div {
-        min-height: 260px;
-      }
-
-      .project-list li {
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }
-
-      .contact-line {
-        flex-direction: column;
-        gap: 4px;
+        padding-top: 48px;
       }
     }
   </style>
 </head>
 <body>
-  <div class="page-shell">
-    <header class="site-header">
-      <div class="container nav">
-        <a class="brand" href="#hero">Heisd.Stark</a>
-        <nav class="nav-links" aria-label="Primary">
-          <a href="#about">About Me</a>
-          <a href="#study">Study</a>
-          <a href="#projects">Project Showing</a>
-          <a href="#topics">Blog Topics</a>
-          <a href="#contact">Get in Touch</a>
-          <a href="/projects" style="font-weight:700;color:var(--text);">Projects</a>
-        </nav>
+  <main class="hero">
+    <section>
+      <div class="eyebrow">Personal Robotics Lab</div>
+      <h1>机器人、视觉与嵌入式 AI 笔记</h1>
+      <p>这是我的个人技术博客，用来记录机器人控制、计算机视觉、嵌入式系统与 AI 项目的设计、实现和总结。你可以浏览项目归档、查看完整文章，也可以登录后台管理内容。现在项目详情还支持插入演示视频。</p>
+      <div class="actions">
+        <a class="button button-primary" href="/projects">浏览项目</a>
+        <a class="button button-secondary" href="/admin-login">后台登录</a>
       </div>
-    </header>
-
-    <main>
-      <section id="hero">
-        <div class="container hero-grid">
-          <article class="panel hero-card fade-up">
-            <div class="hero-copy">
-              <div class="eyebrow">Personal Blog</div>
-              <h1>Heisd.Stark</h1>
-              <div class="hero-subtitle">A ROBOT STUDENT FROM CHINA</div>
-              <p>
-                A minimal digital space for robotics, AI-assisted coding, software
-                experiments, and the process behind what I am building.
-              </p>
-              <a class="btn" href="#about">Explore</a>
-            </div>
-          </article>
-
-          <article class="panel welcome-card fade-up delay-1">
-            <div class="welcome-top">
-              <div>
-                <div class="eyebrow">Arrival</div>
-                <h2>Welcome to My Blog</h2>
-              </div>
-              <p>
-                A clean page with strong contrast, calm spacing, and a focus on
-                study, projects, and growth.
-              </p>
-            </div>
-
-            <div class="welcome-visual">
-              <div class="portrait-circle">
-                <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200"
-                  alt="Illustration placeholder portrait"
-                >
-              </div>
-              <div class="welcome-text">
-                <h3>Building with clarity</h3>
-                <p>
-                  This page introduces who I am, what I study, and the technical
-                  directions I care about most.
-                </p>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="about">
-        <div class="container about-grid">
-          <div class="about-image fade-up">
-            <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=300"
-              alt="Professional portrait"
-            >
-          </div>
-          <div class="about-copy fade-up delay-1">
-            <div class="eyebrow">About Me</div>
-            <h2>AI, code, and study in motion.</h2>
-            <p class="lead">
-              As a student in China, I like coding with AI, I think AI is my best
-              deputy and friend.
-            </p>
-            <p>
-              I prefer practical tools, structured thinking, and direct iteration.
-              My interests sit between robotics, embedded systems, computer vision,
-              and the everyday discipline of getting ideas to work.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="study" class="study-section">
-        <div class="study-box fade-up">
-          <h2>Study</h2>
-        </div>
-      </section>
-
-      <section id="projects">
-        <div class="container projects-grid">
-          <article class="project-list-card fade-up">
-            <div class="eyebrow">Project Showing</div>
-            <h2>What I am building now.</h2>
-            <p>
-              Current work centers on robotics control, visual intelligence, and
-              adding more natural interaction to machines.
-            </p>
-            <ol class="project-list">
-              <li>
-                <div>
-                  <div class="project-item-title">Use Micro-Ros to control robot</div>
-                </div>
-              </li>
-              <li>
-                <div>
-                  <div class="project-item-title">Use Visional Robot</div>
-                </div>
-              </li>
-              <li>
-                <div>
-                  <div class="project-item-title">Add Voice function</div>
-                </div>
-              </li>
-            </ol>
-          </article>
-
-          <div class="project-media-grid fade-up delay-1">
-            <div class="media-tall">
-              <img
-                src="https://images.unsplash.com/photo-1486325212027-8081e485255e?w=300"
-                alt="City image"
-              >
-            </div>
-            <div class="media-stack">
-              <div>
-                <img
-                  src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200"
-                  alt="Smartwatch close-up"
-                >
-              </div>
-              <div>
-                <img
-                  src="https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=200"
-                  alt="Desk setup"
-                >
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="topics">
-        <div class="container">
-          <div class="topics-card fade-up">
-            <div class="eyebrow">Blog Topics</div>
-            <h2>Three themes that shape the blog.</h2>
-            <div class="topics-grid">
-              <article class="topic-card">
-                <h3>Hardware Development</h3>
-                <p>
-                  Embedded experiments, interfaces between software and machines,
-                  and the details that make devices reliable.
-                </p>
-                <div class="topic-list">
-                  <span>&bull; Linux PC</span>
-                </div>
-              </article>
-
-              <article class="topic-card">
-                <h3>Software Development</h3>
-                <p>
-                  Coding with AI, tooling choices, practical automation, and
-                  project architecture learned through building.
-                </p>
-                <div class="topic-list">
-                  <span>&bull;</span>
-                </div>
-              </article>
-
-              <article class="topic-card">
-                <h3>Personal Growth</h3>
-                <p>
-                  Study habits, learning pace, and the mindset needed to keep
-                  improving across technical and creative work.
-                </p>
-              </article>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="contact" class="contact-section">
-        <div class="container">
-          <div class="contact-card fade-up">
-            <div class="contact-copy">
-              <div class="eyebrow">Get in Touch</div>
-              <h2>Let’s connect.</h2>
-              <p>
-                If you want to talk about robotics, AI-assisted development, or a
-                project idea, reach out through the details below.
-              </p>
-              <div class="contact-meta">
-                <div class="contact-line">
-                  <span class="contact-label">Phone</span>
-                  <span class="contact-value">15138357029</span>
-                </div>
-                <div class="contact-line">
-                  <span class="contact-label">Email</span>
-                  <a class="contact-value" href="mailto:yannianyishou@gmail.com">yannianyishou@gmail.com</a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <div class="container">
-        Personal blog page for Heisd.Stark.
-      </div>
-    </footer>
-  </div>
+    </section>
+    <aside class="panel">
+      <h2>当前站点能力</h2>
+      <ul>
+        <li>前端部署在 Vercel，支持公网访问</li>
+        <li>后端部署在 Render，提供项目 CRUD 接口</li>
+        <li>项目数据保存在 Supabase</li>
+        <li>后台支持新增、编辑、删除项目</li>
+        <li>项目详情支持插入演示视频</li>
+      </ul>
+    </aside>
+  </main>
 </body>
 </html>

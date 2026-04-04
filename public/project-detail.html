@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project Detail</title>
+  <title>项目详情</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -77,6 +77,26 @@
       margin-bottom: 10px;
       font-size: 1.25rem;
     }
+    .video-panel {
+      margin-bottom: 28px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 20px;
+    }
+    .video-panel h2 {
+      margin: 0 0 14px;
+      font-size: 1.2rem;
+    }
+    .video-frame,
+    .video-player {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 16 / 9;
+    }
     .state {
       background: white;
       border: 1px dashed var(--line);
@@ -93,8 +113,8 @@
 </head>
 <body>
   <main class="wrap">
-    <a class="back" href="/projects">&larr; Back to projects</a>
-    <div id="project-root" class="state">Loading project...</div>
+    <a class="back" href="/projects">← 返回项目列表</a>
+    <div id="project-root" class="state">正在加载项目...</div>
   </main>
 
   <script>
@@ -109,6 +129,43 @@
       return parts[parts.length - 1];
     }
 
+    function escapeHtml(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function renderVideo(videoUrl) {
+      if (!videoUrl) return "";
+
+      const safeUrl = escapeHtml(videoUrl);
+      const isDirectVideo = /\.(mp4|webm|ogg)(\?.*)?$/i.test(videoUrl);
+
+      if (isDirectVideo) {
+        return `
+          <section class="video-panel">
+            <h2>项目演示视频</h2>
+            <video class="video-player" controls playsinline src="${safeUrl}"></video>
+          </section>
+        `;
+      }
+
+      return `
+        <section class="video-panel">
+          <h2>项目演示视频</h2>
+          <iframe
+            class="video-frame"
+            src="${safeUrl}"
+            title="项目演示视频"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen>
+          </iframe>
+        </section>
+      `;
+    }
+
     async function loadProject() {
       const root = document.getElementById("project-root");
       const id = getProjectId();
@@ -116,15 +173,16 @@
       try {
         const response = await fetch(`${API_BASE}/api/projects/${id}`);
         if (!response.ok) {
-          throw new Error(response.status === 404 ? "Project not found." : "Failed to load project.");
+          throw new Error(response.status === 404 ? "项目不存在。" : "加载项目失败。");
         }
         const project = await response.json();
 
         root.className = "";
         root.innerHTML = `
           <img class="cover" src="${project.coverImage}" alt="${project.title}">
+          ${renderVideo(project.videoUrl)}
           <article>
-            <div class="meta">${project.date}</div>
+            <div class="meta">${project.date || "未设置日期"}</div>
             <h1>${project.title}</h1>
             <div class="summary">${project.summary}</div>
             <div class="content">${project.content}</div>

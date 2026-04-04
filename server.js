@@ -3,10 +3,12 @@ const cors = require("cors");
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const multer = require("multer");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const VIDEO_BUCKET = process.env.SUPABASE_VIDEO_BUCKET || "project-videos";
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -41,6 +43,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     autoRefreshToken: false,
     detectSessionInUrl: false,
     persistSession: false,
+  },
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024,
   },
 });
 
@@ -156,6 +165,7 @@ function toListItem(project) {
     date: project.date,
     summary: project.summary,
     coverImage: project.coverImage,
+    videoUrl: project.videoUrl,
   };
 }
 
@@ -181,6 +191,45 @@ async function ensureUniqueProjectId(title) {
   }
 
   return `${base}-${Date.now()}`;
+}
+
+function guessFileExtension(file) {
+  const byName = path.extname(file.originalname || "").toLowerCase();
+  if (byName) {
+    return byName;
+  }
+
+  const mimeMap = {
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/ogg": ".ogg",
+    "video/quicktime": ".mov",
+  };
+
+  return mimeMap[file.mimetype] || ".mp4";
+}
+
+async function ensureVideoBucket() {
+  const { data, error } = await supabase.storage.listBuckets();
+  if (error) {
+    console.error("Failed to list storage buckets:", error.message);
+    return;
+  }
+
+  const exists = (data || []).some((bucket) => bucket.name === VIDEO_BUCKET);
+  if (exists) {
+    return;
+  }
+
+  const { error: createError } = await supabase.storage.createBucket(VIDEO_BUCKET, {
+    public: true,
+    fileSizeLimit: "100MB",
+    allowedMimeTypes: ["video/mp4", "video/webm", "video/ogg", "video/quicktime"],
+  });
+
+  if (createError) {
+    console.error("Failed to create video bucket:", createError.message);
+  }
 }
 
 app.post("/api/auth/login", (req, res) => {
@@ -214,11 +263,46 @@ app.post("/api/auth/logout", (req, res) => {
   return res.json({ success: true });
 });
 
+app.post("/api/uploads/video", requireAdmin, upload.single("video"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No video file uploaded" });
+    }
+
+    if (!String(req.file.mimetype || "").startsWith("video/")) {
+      return res.status(400).json({ message: "Only video files are allowed" });
+    }
+
+    const filePath = `${Date.now()}-${slugify(path.parse(req.file.originalname).name || "video")}${guessFileExtension(
+      req.file
+    )}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(VIDEO_BUCKET)
+      .upload(filePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from(VIDEO_BUCKET).getPublicUrl(filePath);
+    return res.status(201).json({
+      path: filePath,
+      videoUrl: data.publicUrl,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to upload video", error: error.message });
+  }
+});
+
 app.get("/api/projects", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("projects")
-      .select("id, title, date, summary, coverImage")
+      .select("id, title, date, summary, coverImage, videoUrl")
       .order("date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
 
@@ -268,6 +352,7 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       summary: req.body.summary.trim(),
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
+      videoUrl: String(req.body.videoUrl || "").trim() || null,
     };
 
     const { data, error } = await supabase
@@ -312,6 +397,7 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       summary: req.body.summary.trim(),
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
+      videoUrl: String(req.body.videoUrl || "").trim() || null,
       date: req.body.date ? formatDate(req.body.date) : existing.date,
       updated_at: new Date().toISOString(),
     };
@@ -381,6 +467,8 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+ensureVideoBucket().finally(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
 });
