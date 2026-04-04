@@ -146,7 +146,7 @@
         <h1>Projects Admin</h1>
         <p class="message" id="message"></p>
       </div>
-      <a href="/projects">View published projects</a>
+      <a href="/projects.html">View published projects</a>
     </div>
 
     <div class="grid">
@@ -184,6 +184,7 @@
   </main>
 
   <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
     const form = document.getElementById("project-form");
     const message = document.getElementById("message");
     const projectList = document.getElementById("project-list");
@@ -204,7 +205,7 @@
     }
 
     async function fetchProjects() {
-      const response = await fetch("/api/projects");
+      const response = await fetch(`${API_BASE}/api/projects`);
       if (!response.ok) {
         throw new Error("Failed to load projects.");
       }
@@ -212,7 +213,7 @@
     }
 
     async function fetchProject(id) {
-      const response = await fetch(`/api/projects/${id}`);
+      const response = await fetch(`${API_BASE}/api/projects/${id}`);
       if (!response.ok) {
         throw new Error("Failed to load project details.");
       }
@@ -254,7 +255,7 @@
       };
 
       const method = editingId ? "PUT" : "POST";
-      const url = editingId ? `/api/projects/${editingId}` : "/api/projects";
+      const url = editingId ? `${API_BASE}/api/projects/${editingId}` : `${API_BASE}/api/projects`;
 
       try {
         const response = await fetch(url, {
@@ -304,7 +305,7 @@
         if (!confirmed) return;
 
         try {
-          const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+          const response = await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
           const result = await response.json();
           if (!response.ok) {
             throw new Error(result.message || "Delete failed.");

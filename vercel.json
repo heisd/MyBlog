@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/projects",
+      "destination": "/projects.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/project/:id",
+      "destination": "/project-detail.html?id=:id"
+    }
+  ]
+}

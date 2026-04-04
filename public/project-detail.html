@@ -98,7 +98,13 @@
   </main>
 
   <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+
     function getProjectId() {
+      const params = new URLSearchParams(window.location.search);
+      const queryId = params.get("id");
+      if (queryId) return queryId;
+
       const parts = window.location.pathname.split("/").filter(Boolean);
       return parts[parts.length - 1];
     }
@@ -108,7 +114,7 @@
       const id = getProjectId();
 
       try {
-        const response = await fetch(`/api/projects/${id}`);
+        const response = await fetch(`${API_BASE}/api/projects/${id}`);
         if (!response.ok) {
           throw new Error(response.status === 404 ? "Project not found." : "Failed to load project.");
         }
