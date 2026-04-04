@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --card: rgba(255, 252, 246, 0.95);
+      --ink: #1f2328;
+      --muted: #6b7280;
+      --line: #e5dccf;
+      --accent: #9f4716;
+      --accent-dark: #7c3410;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(159, 71, 22, 0.18), transparent 26%),
+        linear-gradient(180deg, #fbf7f1 0%, var(--bg) 100%);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(460px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: 30px;
+      box-shadow: 0 24px 60px rgba(53, 41, 30, 0.08);
+    }
+    .eyebrow {
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent-dark);
+      font-size: 12px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+    }
+    p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    form {
+      display: grid;
+      gap: 14px;
+    }
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 700;
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      background: white;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 13px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      margin-top: 8px;
+    }
+    button:hover {
+      background: var(--accent-dark);
+    }
+    .message {
+      min-height: 22px;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .message.error {
+      color: var(--danger);
+    }
+    .links {
+      margin-top: 18px;
+    }
+    .links a {
+      color: var(--accent-dark);
+      text-decoration: none;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="eyebrow">Admin Access</div>
+    <h1>Sign in to manage projects</h1>
+    <p>Use your administrator username and password to create, edit, or remove posts.</p>
+
+    <form id="login-form">
+      <label>
+        Username
+        <input id="username" name="username" autocomplete="username" required>
+      </label>
+
+      <label>
+        Password
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+
+      <button type="submit">Log in</button>
+    </form>
+
+    <div id="message" class="message">Ready.</div>
+    <div class="links">
+      <a href="/projects.html">Back to projects</a>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const AUTH_TOKEN_KEY = "adminToken";
+    const form = document.getElementById("login-form");
+    const message = document.getElementById("message");
+
+    function setMessage(text, isError = false) {
+      message.textContent = text;
+      message.className = isError ? "message error" : "message";
+    }
+
+    async function verifyExistingSession() {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/verify`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          window.location.href = "/admin.html";
+        }
+      } catch {}
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setMessage("Signing in...");
+
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: form.username.value.trim(),
+            password: form.password.value
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.message || "Login failed.");
+        }
+
+        localStorage.setItem(AUTH_TOKEN_KEY, result.token);
+        window.location.href = "/admin.html";
+      } catch (error) {
+        setMessage(error.message, true);
+      }
+    });
+
+    verifyExistingSession();
+  </script>
+</body>
+</html>

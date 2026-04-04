@@ -9,6 +9,10 @@
       "destination": "/admin.html"
     },
     {
+      "source": "/admin-login",
+      "destination": "/admin-login.html"
+    },
+    {
       "source": "/project/:id",
       "destination": "/project-detail.html?id=:id"
     }

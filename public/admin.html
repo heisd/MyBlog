@@ -34,6 +34,12 @@
       margin-bottom: 24px;
       flex-wrap: wrap;
     }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
     .topbar a {
       color: var(--muted);
       text-decoration: none;
@@ -144,9 +150,12 @@
     <div class="topbar">
       <div>
         <h1>Projects Admin</h1>
-        <p class="message" id="message"></p>
+        <p class="message" id="message">Ready.</p>
       </div>
-      <a href="/projects.html">View published projects</a>
+      <div class="topbar-actions">
+        <a href="/projects.html">View published projects</a>
+        <button class="secondary" type="button" id="logout-button">Log out</button>
+      </div>
     </div>
 
     <div class="grid">
@@ -178,19 +187,24 @@
 
       <section class="panel">
         <h2>Existing Projects</h2>
-        <div id="project-list" class="project-list"></div>
+        <div id="project-list" class="project-list">
+          <div class="project-card"><p>Loading projects...</p></div>
+        </div>
       </section>
     </div>
   </main>
 
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const AUTH_TOKEN_KEY = "adminToken";
     const form = document.getElementById("project-form");
     const message = document.getElementById("message");
     const projectList = document.getElementById("project-list");
     const formTitle = document.getElementById("form-title");
     const resetButton = document.getElementById("reset-button");
+    const logoutButton = document.getElementById("logout-button");
     let editingId = null;
+    let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
     function setMessage(text, isError = false) {
       message.textContent = text;
@@ -204,8 +218,47 @@
       setMessage(statusText);
     }
 
+    function redirectToLogin() {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      window.location.href = "/admin-login.html";
+    }
+
+    async function authFetch(url, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+
+      if (response.status === 401) {
+        redirectToLogin();
+        throw new Error("Authentication required.");
+      }
+
+      return response;
+    }
+
+    async function verifySession() {
+      if (!authToken) {
+        redirectToLogin();
+        return false;
+      }
+
+      try {
+        const response = await authFetch(`${API_BASE}/api/auth/verify`);
+        return response.ok;
+      } catch {
+        redirectToLogin();
+        return false;
+      }
+    }
+
     async function fetchProjects() {
-      const response = await fetch(`${API_BASE}/api/projects`);
+      const response = await authFetch(`${API_BASE}/api/projects`);
       if (!response.ok) {
         throw new Error("Failed to load projects.");
       }
@@ -213,7 +266,7 @@
     }
 
     async function fetchProject(id) {
-      const response = await fetch(`${API_BASE}/api/projects/${id}`);
+      const response = await authFetch(`${API_BASE}/api/projects/${id}`);
       if (!response.ok) {
         throw new Error("Failed to load project details.");
       }
@@ -230,7 +283,7 @@
 
         projectList.innerHTML = projects.map((project) => `
           <article class="project-card">
-            <div>${project.date}</div>
+            <div>${project.date || ""}</div>
             <h3>${project.title}</h3>
             <p>${project.summary}</p>
             <div class="card-actions">
@@ -258,7 +311,7 @@
       const url = editingId ? `${API_BASE}/api/projects/${editingId}` : `${API_BASE}/api/projects`;
 
       try {
-        const response = await fetch(url, {
+        const response = await authFetch(url, {
           method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -275,7 +328,14 @@
       }
     });
 
-    resetButton.addEventListener("click", resetForm);
+    resetButton.addEventListener("click", () => resetForm());
+
+    logoutButton.addEventListener("click", async () => {
+      try {
+        await authFetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
+      } catch {}
+      redirectToLogin();
+    });
 
     projectList.addEventListener("click", async (event) => {
       const button = event.target.closest("button");
@@ -305,7 +365,7 @@
         if (!confirmed) return;
 
         try {
-          const response = await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
+          const response = await authFetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
           const result = await response.json();
           if (!response.ok) {
             throw new Error(result.message || "Delete failed.");
@@ -321,8 +381,11 @@
       }
     });
 
-    resetForm();
-    renderProjects();
+    verifySession().then((ok) => {
+      if (!ok) return;
+      resetForm();
+      renderProjects();
+    });
   </script>
 </body>
 </html>

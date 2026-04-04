@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs/promises");
 const path = require("path");
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
@@ -14,13 +15,24 @@ const PUBLIC_INDEX = path.join(PUBLIC_DIR, "index.html");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET;
 const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
+if (
+  !SUPABASE_URL ||
+  !SUPABASE_SERVICE_ROLE_KEY ||
+  !ADMIN_USERNAME ||
+  !ADMIN_PASSWORD ||
+  !ADMIN_SESSION_SECRET
+) {
+  console.error(
+    "Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ADMIN_USERNAME, ADMIN_PASSWORD, or ADMIN_SESSION_SECRET."
+  );
   process.exit(1);
 }
 
@@ -67,6 +79,76 @@ function slugify(input) {
     .replace(/^-+|-+$/g, "");
 }
 
+function constantTimeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ""));
+  const rightBuffer = Buffer.from(String(right || ""));
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function signTokenPayload(encodedPayload) {
+  return crypto
+    .createHmac("sha256", ADMIN_SESSION_SECRET)
+    .update(encodedPayload)
+    .digest("base64url");
+}
+
+function createAdminToken() {
+  const payload = {
+    username: ADMIN_USERNAME,
+    exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
+  };
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = signTokenPayload(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyAdminToken(token) {
+  if (!token) {
+    return null;
+  }
+
+  const [encodedPayload, signature] = String(token).split(".");
+  if (!encodedPayload || !signature) {
+    return null;
+  }
+
+  const expectedSignature = signTokenPayload(encodedPayload);
+  if (!constantTimeEqual(signature, expectedSignature)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+    if (payload.username !== ADMIN_USERNAME || Number(payload.exp) < Date.now()) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function readBearerToken(req) {
+  const authorization = req.get("authorization") || "";
+  if (!authorization.toLowerCase().startsWith("bearer ")) {
+    return null;
+  }
+  return authorization.slice(7).trim();
+}
+
+function requireAdmin(req, res, next) {
+  const session = verifyAdminToken(readBearerToken(req));
+  if (!session) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  req.adminSession = session;
+  return next();
+}
+
 function toListItem(project) {
   return {
     id: project.id,
@@ -100,6 +182,37 @@ async function ensureUniqueProjectId(title) {
 
   return `${base}-${Date.now()}`;
 }
+
+app.post("/api/auth/login", (req, res) => {
+  const username = req.body?.username;
+  const password = req.body?.password;
+
+  if (!constantTimeEqual(username, ADMIN_USERNAME) || !constantTimeEqual(password, ADMIN_PASSWORD)) {
+    return res.status(401).json({ message: "Invalid username or password" });
+  }
+
+  return res.json({
+    token: createAdminToken(),
+    username: ADMIN_USERNAME,
+  });
+});
+
+app.get("/api/auth/verify", (req, res) => {
+  const session = verifyAdminToken(readBearerToken(req));
+  if (!session) {
+    return res.status(401).json({ authenticated: false });
+  }
+
+  return res.json({
+    authenticated: true,
+    username: session.username,
+    expiresAt: session.exp,
+  });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  return res.json({ success: true });
+});
 
 app.get("/api/projects", async (req, res) => {
   try {
@@ -141,7 +254,7 @@ app.get("/api/projects/:id", async (req, res) => {
   }
 });
 
-app.post("/api/projects", async (req, res) => {
+app.post("/api/projects", requireAdmin, async (req, res) => {
   try {
     const missing = validateProjectInput(req.body);
     if (missing.length) {
@@ -173,7 +286,7 @@ app.post("/api/projects", async (req, res) => {
   }
 });
 
-app.put("/api/projects/:id", async (req, res) => {
+app.put("/api/projects/:id", requireAdmin, async (req, res) => {
   try {
     const missing = validateProjectInput(req.body);
     if (missing.length) {
@@ -220,7 +333,7 @@ app.put("/api/projects/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/projects/:id", async (req, res) => {
+app.delete("/api/projects/:id", requireAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("projects")
@@ -253,6 +366,10 @@ app.get("/project/:id", (req, res) => {
 
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "admin.html"));
+});
+
+app.get("/admin-login", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "admin-login.html"));
 });
 
 app.get("/", async (req, res) => {
