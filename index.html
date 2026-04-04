@@ -3,61 +3,127 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>机器人技术博客</title>
+  <title>Heisd.Stark | 个人博客</title>
   <style>
     :root {
-      --bg: #f5f1e8;
-      --paper: #fffdf8;
+      --bg: #f4efe7;
+      --paper: rgba(255, 253, 247, 0.9);
+      --card: #fffdf8;
       --ink: #1f1f1f;
-      --muted: #6a625b;
-      --accent: #d86d2a;
-      --accent-dark: #9f4716;
-      --line: #e6ded2;
+      --muted: #6b625b;
+      --accent: #cc6a2d;
+      --accent-dark: #8e4317;
+      --line: #e5dbcf;
+      --shadow: 0 22px 50px rgba(68, 48, 30, 0.08);
     }
+
     * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
       margin: 0;
       font-family: Georgia, "Times New Roman", serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(216,109,42,0.15), transparent 25%),
-        linear-gradient(180deg, #f6f1e9 0%, var(--bg) 100%);
+        radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
     }
-    .hero {
-      max-width: 1100px;
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(248, 244, 237, 0.78);
+      border-bottom: 1px solid rgba(229, 219, 207, 0.9);
+    }
+
+    .topbar-inner {
+      max-width: 1160px;
       margin: 0 auto;
-      padding: 72px 24px 48px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-weight: 700;
+      color: var(--accent-dark);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.95rem;
+    }
+
+    .nav {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+
+    .nav a:hover {
+      color: var(--accent-dark);
+    }
+
+    .section {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+
+    .hero {
+      min-height: calc(100vh - 76px);
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
+      grid-template-columns: 1.15fr 0.85fr;
       gap: 32px;
-      min-height: 100vh;
       align-items: center;
     }
+
     .eyebrow {
       letter-spacing: 0.24em;
       text-transform: uppercase;
       color: var(--accent-dark);
       font-size: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
+      font-weight: 700;
     }
+
     h1 {
-      font-size: clamp(2.8rem, 6vw, 5.3rem);
-      line-height: 0.95;
-      margin: 0 0 20px;
-      max-width: 8ch;
+      margin: 0 0 18px;
+      font-size: clamp(3rem, 7vw, 6rem);
+      line-height: 0.92;
+      max-width: 7ch;
     }
-    p {
-      font-size: 1.05rem;
-      line-height: 1.9;
+
+    .lead {
+      margin: 0;
       color: var(--muted);
       max-width: 60ch;
+      line-height: 1.9;
+      font-size: 1.05rem;
     }
-    .actions {
+
+    .hero-actions {
       display: flex;
+      gap: 14px;
       flex-wrap: wrap;
-      gap: 16px;
-      margin-top: 28px;
+      margin-top: 30px;
     }
+
     .button {
       display: inline-flex;
       align-items: center;
@@ -68,67 +134,324 @@
       font-weight: 700;
       transition: transform 180ms ease, box-shadow 180ms ease;
     }
+
     .button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 12px 30px rgba(31, 31, 31, 0.1);
+      box-shadow: 0 14px 30px rgba(31, 31, 31, 0.1);
     }
+
     .button-primary {
       background: var(--accent);
-      color: white;
+      color: #fff;
     }
+
     .button-secondary {
-      color: var(--ink);
+      background: rgba(255, 255, 255, 0.76);
       border: 1px solid var(--line);
-      background: rgba(255,255,255,0.75);
+      color: var(--ink);
     }
-    .panel {
-      background: rgba(255,253,248,0.82);
-      border: 1px solid rgba(230,222,210,0.95);
-      border-radius: 28px;
-      padding: 26px;
-      box-shadow: 0 24px 60px rgba(53, 41, 30, 0.08);
-      backdrop-filter: blur(4px);
+
+    .hero-panel,
+    .panel,
+    .topic-card,
+    .project-card,
+    .contact-card {
+      background: var(--paper);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
     }
-    .panel h2 {
-      margin-top: 0;
-      font-size: 1.3rem;
+
+    .hero-panel {
+      padding: 28px;
+      display: grid;
+      gap: 18px;
     }
-    .panel ul {
-      padding-left: 18px;
+
+    .hero-panel-title {
       margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .hero-panel ul {
+      margin: 0;
+      padding-left: 18px;
       color: var(--muted);
       line-height: 1.8;
     }
-    @media (max-width: 860px) {
-      .hero {
+
+    .section-head {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .section-kicker {
+      color: var(--accent-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .section h2 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.05;
+    }
+
+    .section-desc {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.8;
+      max-width: 68ch;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 0.95fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 26px;
+    }
+
+    .panel p,
+    .panel li,
+    .topic-card p,
+    .project-card p,
+    .contact-card p {
+      color: var(--muted);
+      line-height: 1.85;
+    }
+
+    .study-grid,
+    .topics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .topic-card {
+      padding: 22px;
+      min-height: 220px;
+    }
+
+    .topic-card h3,
+    .project-card h3,
+    .contact-card h3 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 1.18rem;
+    }
+
+    .project-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .project-card {
+      padding: 22px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .project-tag {
+      display: inline-flex;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(204,106,45,0.12);
+      color: var(--accent-dark);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .contact-card {
+      padding: 22px;
+    }
+
+    .footer-note {
+      padding: 0 24px 50px;
+      max-width: 1160px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .two-col,
+      .study-grid,
+      .topics-grid,
+      .project-grid,
+      .contact-grid {
         grid-template-columns: 1fr;
-        min-height: auto;
-        padding-top: 48px;
+      }
+
+      h1 {
+        max-width: none;
       }
     }
   </style>
 </head>
 <body>
-  <main class="hero">
-    <section>
-      <div class="eyebrow">Personal Robotics Lab</div>
-      <h1>机器人、视觉与嵌入式 AI 笔记</h1>
-      <p>这是我的个人技术博客，用来记录机器人控制、计算机视觉、嵌入式系统与 AI 项目的设计、实现和总结。你可以浏览项目归档、查看完整文章，也可以登录后台管理内容。现在项目详情还支持插入演示视频。</p>
-      <div class="actions">
-        <a class="button button-primary" href="/projects">浏览项目</a>
-        <a class="button button-secondary" href="/admin-login">后台登录</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="#about">关于我</a>
+        <a href="#study">学习方向</a>
+        <a href="#projects-show">项目展示</a>
+        <a href="#topics">博客主题</a>
+        <a href="#contact">联系方式</a>
+        <a href="/projects">项目归档</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="section hero">
+      <section>
+        <div class="eyebrow">Personal Blog</div>
+        <h1>Heisd. Stark</h1>
+        <p class="lead">一名来自中国的机器人方向学生。我用这个博客记录自己在机器人控制、AI 辅助编程、软件实验和技术成长过程中的思考与实践。这里既是作品展示页，也是持续学习的数字空间。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="/projects">浏览项目</a>
+          <a class="button button-secondary" href="/admin-login">进入后台</a>
+        </div>
+      </section>
+      <aside class="hero-panel">
+        <h2 class="hero-panel-title">欢迎来到我的博客</h2>
+        <ul>
+          <li>一个以机器人、视觉和 AI 为核心的个人技术主页</li>
+          <li>保留了第一版首页的多分区结构，并接入了新的线上部署能力</li>
+          <li>项目数据由 Supabase 管理，后台支持登录保护</li>
+          <li>项目详情页支持插入视频，后台可上传本地视频文件</li>
+        </ul>
+      </aside>
+    </section>
+
+    <section id="about" class="section">
+      <div class="section-head">
+        <div class="section-kicker">About Me</div>
+        <h2>AI、代码与学习一起向前。</h2>
+        <p class="section-desc">我喜欢把 AI 当成副驾驶，也喜欢把想法快速做成能运行的东西。我的兴趣交叉在机器人、嵌入式、计算机视觉，以及把复杂事情一步一步做通的过程里。</p>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <p>作为一名在中国学习机器人方向的学生，我更偏好实用工具、结构化思考和直接迭代。相比只谈概念，我更在意一个系统能不能真正跑起来、有没有可维护性、有没有足够清晰的工程边界。</p>
+          <p>这个博客的定位不是单纯展示结果，而是记录“我如何把一个想法做成一个可运行项目”。因此你会在这里看到项目笔记、技术拆解、以及一些与学习方法相关的反思。</p>
+        </div>
+        <div class="panel">
+          <h3>我关注的方向</h3>
+          <ul>
+            <li>机器人控制与 ROS / Micro-ROS</li>
+            <li>计算机视觉与智能交互</li>
+            <li>嵌入式系统与软硬件协同</li>
+            <li>AI 辅助开发与个人效率系统</li>
+          </ul>
+        </div>
       </div>
     </section>
-    <aside class="panel">
-      <h2>当前站点能力</h2>
-      <ul>
-        <li>前端部署在 Vercel，支持公网访问</li>
-        <li>后端部署在 Render，提供项目 CRUD 接口</li>
-        <li>项目数据保存在 Supabase</li>
-        <li>后台支持新增、编辑、删除项目</li>
-        <li>项目详情支持插入演示视频</li>
-      </ul>
-    </aside>
+
+    <section id="study" class="section">
+      <div class="section-head">
+        <div class="section-kicker">Study</div>
+        <h2>我目前主要在学什么。</h2>
+        <p class="section-desc">当前的学习和实践重点集中在机器人控制、视觉智能以及让机器拥有更自然的人机交互方式。</p>
+      </div>
+      <div class="study-grid">
+        <article class="topic-card">
+          <h3>Micro-ROS 机器人控制</h3>
+          <p>把微控制器层和更高层 ROS 2 系统打通，处理运动控制、遥测回传和稳定通信。</p>
+        </article>
+        <article class="topic-card">
+          <h3>视觉机器人系统</h3>
+          <p>用 OpenCV 和轻量模型做目标检测、抓取估计与空间映射，让机器人“看见并理解”。</p>
+        </article>
+        <article class="topic-card">
+          <h3>语音交互能力</h3>
+          <p>把语音识别、意图理解和任务调度连接起来，让机器人获得更自然的操作方式。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="projects-show" class="section">
+      <div class="section-head">
+        <div class="section-kicker">Project Showing</div>
+        <h2>我正在构建什么。</h2>
+        <p class="section-desc">这些项目代表了我当前最核心的技术方向，也是整个博客内容不断扩展的基础。</p>
+      </div>
+      <div class="project-grid">
+        <article class="project-card">
+          <span class="project-tag">机器人控制</span>
+          <h3>Micro-ROS Robot Control System</h3>
+          <p>围绕嵌入式控制器与 ROS 2 通信搭建轻量控制栈，用于运动控制、遥测和边缘协同。</p>
+        </article>
+        <article class="project-card">
+          <span class="project-tag">视觉抓取</span>
+          <h3>AI Vision Grasping System</h3>
+          <p>结合 OpenCV 与深度学习抓取管线，实现目标识别、抓取点评估和机械臂拾取。</p>
+        </article>
+        <article class="project-card">
+          <span class="project-tag">语音交互</span>
+          <h3>Voice-Controlled Robot Assistant</h3>
+          <p>将语音命令映射为导航、状态查询和简单任务执行，降低人机交互门槛。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="topics" class="section">
+      <div class="section-head">
+        <div class="section-kicker">Blog Topics</div>
+        <h2>这个博客围绕的三个主题。</h2>
+        <p class="section-desc">我希望这个站点不仅展示项目成果，也持续沉淀硬件、软件和个人成长这三条主线。</p>
+      </div>
+      <div class="topics-grid">
+        <article class="topic-card">
+          <h3>硬件开发</h3>
+          <p>记录嵌入式实验、软件与机器之间的接口，以及让设备真正可靠运行的细节。</p>
+        </article>
+        <article class="topic-card">
+          <h3>软件开发</h3>
+          <p>记录 AI 辅助编程、工具选择、自动化实践，以及在实际项目中形成的架构经验。</p>
+        </article>
+        <article class="topic-card">
+          <h3>个人成长</h3>
+          <p>记录学习节奏、执行方法与长期进步需要的思维方式，让技术积累和个人成长同步发生。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="contact" class="section">
+      <div class="section-head">
+        <div class="section-kicker">Get in Touch</div>
+        <h2>如果你也关注机器人和 AI，欢迎联系我。</h2>
+        <p class="section-desc">如果你想交流机器人、AI 辅助开发，或者一起讨论一个项目方向，可以通过下面的信息找到我。</p>
+      </div>
+      <div class="contact-grid">
+        <article class="contact-card">
+          <h3>电话</h3>
+          <p>15138357029</p>
+        </article>
+        <article class="contact-card">
+          <h3>邮箱</h3>
+          <p>yannianyishou@gmail.com</p>
+        </article>
+      </div>
+    </section>
   </main>
+
+  <div class="footer-note">这是 Heisd.Stark 的个人博客首页，目前已接入线上项目系统、后台登录保护以及视频上传能力。</div>
 </body>
 </html>

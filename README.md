@@ -1,4 +1,4 @@
-# ClaudeAboutWeb
+# MyBlogAboutWeb
 
 一个已经完成线上部署的个人博客项目，展示机器人、视觉与嵌入式 AI 相关内容。
 
@@ -100,13 +100,13 @@ ClaudeAboutWeb/
 
 后端由 `Render` 托管，接口包括：
 
-| 方法 | 路径 | 功能 |
-| --- | --- | --- |
-| `GET` | `/api/projects` | 获取项目列表 |
-| `GET` | `/api/projects/:id` | 获取单个项目详情 |
-| `POST` | `/api/projects` | 新建项目 |
-| `PUT` | `/api/projects/:id` | 更新项目 |
-| `DELETE` | `/api/projects/:id` | 删除项目 |
+| 方法       | 路径                  | 功能             |
+| ---------- | --------------------- | ---------------- |
+| `GET`    | `/api/projects`     | 获取项目列表     |
+| `GET`    | `/api/projects/:id` | 获取单个项目详情 |
+| `POST`   | `/api/projects`     | 新建项目         |
+| `PUT`    | `/api/projects/:id` | 更新项目         |
+| `DELETE` | `/api/projects/:id` | 删除项目         |
 
 ## Supabase 数据表
 
