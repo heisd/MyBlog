@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projects Admin</title>
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --card: #ffffff;
+      --ink: #18212f;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --accent: #166534;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 24px 60px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .topbar a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 0.9fr;
+      gap: 22px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    form {
+      display: grid;
+      gap: 14px;
+    }
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 700;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      background: #fbfdff;
+    }
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .primary {
+      background: var(--accent);
+      color: white;
+    }
+    .secondary {
+      background: #e2e8f0;
+      color: var(--ink);
+    }
+    .danger {
+      background: var(--danger);
+      color: white;
+    }
+    .message {
+      min-height: 24px;
+      color: var(--muted);
+    }
+    .project-list {
+      display: grid;
+      gap: 14px;
+    }
+    .project-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .project-card h3 {
+      margin: 0;
+    }
+    .project-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .project-card .card-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .project-card .card-actions button {
+      padding: 10px 14px;
+      border-radius: 10px;
+    }
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>Projects Admin</h1>
+        <p class="message" id="message"></p>
+      </div>
+      <a href="/projects">View published projects</a>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2 id="form-title">Create Project</h2>
+        <form id="project-form">
+          <label>
+            Title
+            <input id="title" name="title" required>
+          </label>
+          <label>
+            Summary
+            <textarea id="summary" name="summary" required></textarea>
+          </label>
+          <label>
+            Cover image URL
+            <input id="coverImage" name="coverImage" type="url" required>
+          </label>
+          <label>
+            Full content (HTML allowed)
+            <textarea id="content" name="content" required></textarea>
+          </label>
+          <div class="actions">
+            <button class="primary" type="submit">Save Project</button>
+            <button class="secondary" type="button" id="reset-button">Reset</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Existing Projects</h2>
+        <div id="project-list" class="project-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById("project-form");
+    const message = document.getElementById("message");
+    const projectList = document.getElementById("project-list");
+    const formTitle = document.getElementById("form-title");
+    const resetButton = document.getElementById("reset-button");
+    let editingId = null;
+
+    function setMessage(text, isError = false) {
+      message.textContent = text;
+      message.style.color = isError ? "#b91c1c" : "#64748b";
+    }
+
+    function resetForm(statusText = "Ready.") {
+      editingId = null;
+      form.reset();
+      formTitle.textContent = "Create Project";
+      setMessage(statusText);
+    }
+
+    async function fetchProjects() {
+      const response = await fetch("/api/projects");
+      if (!response.ok) {
+        throw new Error("Failed to load projects.");
+      }
+      return response.json();
+    }
+
+    async function fetchProject(id) {
+      const response = await fetch(`/api/projects/${id}`);
+      if (!response.ok) {
+        throw new Error("Failed to load project details.");
+      }
+      return response.json();
+    }
+
+    async function renderProjects() {
+      try {
+        const projects = await fetchProjects();
+        if (!projects.length) {
+          projectList.innerHTML = "<div class='project-card'><p>No projects yet.</p></div>";
+          return;
+        }
+
+        projectList.innerHTML = projects.map((project) => `
+          <article class="project-card">
+            <div>${project.date}</div>
+            <h3>${project.title}</h3>
+            <p>${project.summary}</p>
+            <div class="card-actions">
+              <button class="secondary" data-action="edit" data-id="${project.id}">Edit</button>
+              <button class="danger" data-action="delete" data-id="${project.id}">Delete</button>
+            </div>
+          </article>
+        `).join("");
+      } catch (error) {
+        projectList.innerHTML = `<div class="project-card"><p>${error.message}</p></div>`;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        title: form.title.value.trim(),
+        summary: form.summary.value.trim(),
+        coverImage: form.coverImage.value.trim(),
+        content: form.content.value.trim()
+      };
+
+      const method = editingId ? "PUT" : "POST";
+      const url = editingId ? `/api/projects/${editingId}` : "/api/projects";
+
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.message || "Request failed.");
+        }
+
+        resetForm(editingId ? "Project updated." : "Project created.");
+        await renderProjects();
+      } catch (error) {
+        setMessage(error.message, true);
+      }
+    });
+
+    resetButton.addEventListener("click", resetForm);
+
+    projectList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+
+      const id = button.dataset.id;
+      const action = button.dataset.action;
+
+      if (action === "edit") {
+        try {
+          const project = await fetchProject(id);
+          editingId = project.id;
+          formTitle.textContent = "Edit Project";
+          form.title.value = project.title;
+          form.summary.value = project.summary;
+          form.coverImage.value = project.coverImage;
+          form.content.value = project.content;
+          setMessage(`Editing "${project.title}".`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (error) {
+          setMessage(error.message, true);
+        }
+      }
+
+      if (action === "delete") {
+        const confirmed = window.confirm("Delete this project?");
+        if (!confirmed) return;
+
+        try {
+          const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.message || "Delete failed.");
+          }
+          if (editingId === id) {
+            resetForm();
+          }
+          setMessage("Project deleted.");
+          await renderProjects();
+        } catch (error) {
+          setMessage(error.message, true);
+        }
+      }
+    });
+
+    resetForm();
+    renderProjects();
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "claude-about-web-blog",
+  "version": "1.0.0",
+  "description": "Personal blog backend with projects CRUD for robotics and AI posts.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}

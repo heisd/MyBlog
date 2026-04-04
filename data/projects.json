@@ -1,0 +1,26 @@
+[
+  {
+    "id": "micro-ros-robot-control-system",
+    "title": "Micro-ROS Robot Control System",
+    "date": "2026-03-20",
+    "summary": "A lightweight robot control stack built on micro-ROS for reliable motion commands, telemetry, and embedded edge coordination.",
+    "coverImage": "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=1200&q=80",
+    "content": "<p>This project focused on building a compact robot control system around micro-ROS so an embedded controller could communicate cleanly with a higher-level ROS 2 stack.</p><p>I designed the communication layer to publish wheel odometry, IMU readings, and battery telemetry while subscribing to velocity commands from the navigation pipeline. The control loop ran on a microcontroller with deterministic timing, which kept motion smooth even when wireless traffic spiked.</p><h3>Core work</h3><p>Key milestones included tuning PID loops for differential drive motion, defining custom ROS message schemas for diagnostics, and adding watchdog-based safety stops for command loss and motor faults.</p><p>The result was a control system that made it easy to move from simulation to hardware while still keeping the embedded layer observable and maintainable.</p>"
+  },
+  {
+    "id": "ai-vision-grasping-system",
+    "title": "AI Vision Grasping System",
+    "date": "2026-03-12",
+    "summary": "An OpenCV and deep-learning grasping pipeline that detects objects, estimates pick points, and guides a robotic arm for repeatable pickup tasks.",
+    "coverImage": "https://images.unsplash.com/photo-1561144257-e32e8efc6c4f?auto=format&fit=crop&w=1200&q=80",
+    "content": "<p>This system combined RGB camera input, OpenCV preprocessing, and a lightweight neural detector to identify graspable objects on a tabletop scene.</p><p>I built the pipeline to segment the workspace, detect object contours, estimate object orientation, and convert image coordinates into robot arm positions through a calibrated camera-to-arm transform.</p><h3>Technical focus</h3><p>The most important improvements came from image normalization, contour filtering, and a grasp ranking strategy that rejected unstable picks near cluttered edges. The arm controller then executed the best candidate grasp with approach, grip, and retreat phases.</p><p>In testing, the system significantly improved first-attempt pick success for small consumer objects under mixed lighting.</p>"
+  },
+  {
+    "id": "voice-controlled-robot-assistant",
+    "title": "Voice-Controlled Robot Assistant",
+    "date": "2026-03-05",
+    "summary": "A voice-command interface for a service robot that maps spoken intents to navigation, object lookup, and simple task execution.",
+    "coverImage": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
+    "content": "<p>This project explored how to make a mobile robot easier to use by adding a speech-driven command layer on top of its existing navigation and task modules.</p><p>I connected speech-to-text with an intent parser that mapped phrases like \"go to the charging station\" or \"bring the toolbox\" into structured commands. A dispatcher service validated those intents and triggered the right ROS actions for movement, item lookup, or status reporting.</p><h3>What mattered</h3><p>The main engineering work went into handling noisy speech, confirming ambiguous requests, and building fallbacks when the robot could not safely execute a command. I also added spoken feedback so the system felt responsive and transparent to the operator.</p><p>The final assistant was simple, but it proved that natural voice interaction could reduce operator friction for routine service tasks.</p>"
+  }
+]

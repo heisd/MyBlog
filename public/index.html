@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robotics Blog</title>
+  <style>
+    :root {
+      --bg: #f5f3ee;
+      --paper: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6a625b;
+      --accent: #d86d2a;
+      --accent-dark: #9f4716;
+      --line: #e6ded2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(216,109,42,0.15), transparent 25%),
+        linear-gradient(180deg, #f6f1e9 0%, var(--bg) 100%);
+    }
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 72px 24px 48px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 32px;
+      min-height: 100vh;
+      align-items: center;
+    }
+    .eyebrow {
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--accent-dark);
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: clamp(2.8rem, 6vw, 5.6rem);
+      line-height: 0.95;
+      margin: 0 0 20px;
+      max-width: 8ch;
+    }
+    p {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--muted);
+      max-width: 58ch;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 22px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      transition: transform 180ms ease, box-shadow 180ms ease;
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(31, 31, 31, 0.1);
+    }
+    .button-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .button-secondary {
+      color: var(--ink);
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.7);
+    }
+    .panel {
+      background: rgba(255,253,248,0.8);
+      border: 1px solid rgba(230,222,210,0.95);
+      border-radius: 28px;
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(53, 41, 30, 0.08);
+      backdrop-filter: blur(4px);
+    }
+    .panel h2 {
+      margin-top: 0;
+      font-size: 1.3rem;
+    }
+    .panel ul {
+      padding-left: 18px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding-top: 48px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="hero">
+    <section>
+      <div class="eyebrow">Personal Robotics Lab</div>
+      <h1>Notes from robots, vision, and embedded AI.</h1>
+      <p>This backend now powers a small project publishing system for robotics and AI work. Browse the project archive, open individual writeups, or manage posts through the built-in admin page.</p>
+      <div class="actions">
+        <a class="button button-primary" href="/projects">Browse Projects</a>
+        <a class="button button-secondary" href="/admin">Open Admin</a>
+      </div>
+    </section>
+    <aside class="panel">
+      <h2>Included in this build</h2>
+      <ul>
+        <li>Express server on port 3000</li>
+        <li>File-backed JSON CRUD API for projects</li>
+        <li>Project archive page and detail route</li>
+        <li>Admin interface for creating, editing, and deleting posts</li>
+      </ul>
+    </aside>
+  </main>
+</body>
+</html>
