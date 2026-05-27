@@ -119,10 +119,17 @@ create table projects (
   date date,
   summary text,
   "coverImage" text,
+  "videoUrl" text,
   content text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+```
+
+如果你的 `projects` 表是在加入视频功能之前创建的，请对线上数据库执行下面的迁移补上 `videoUrl` 列，否则项目列表、新增、编辑接口会返回 500：
+
+```sql
+alter table projects add column if not exists "videoUrl" text;
 ```
 
 ## 本地运行
