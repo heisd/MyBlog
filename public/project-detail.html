@@ -175,7 +175,12 @@
         if (!response.ok) {
           throw new Error(response.status === 404 ? "项目不存在。" : "加载项目失败。");
         }
-        const project = await response.json();
+        let project;
+        try {
+          project = await response.json();
+        } catch {
+          throw new Error("服务器返回异常，请稍后重试。");
+        }
 
         root.className = "";
         root.innerHTML = `

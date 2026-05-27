@@ -188,7 +188,12 @@
         if (!response.ok) {
           throw new Error("加载项目失败。");
         }
-        const projects = await response.json();
+        let projects;
+        try {
+          projects = await response.json();
+        } catch {
+          throw new Error("服务器返回异常，请稍后重试。");
+        }
 
         if (!projects.length) {
           container.innerHTML = "<div class='empty'>暂时还没有已发布的项目。</div>";

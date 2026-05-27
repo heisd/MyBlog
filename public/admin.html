@@ -301,6 +301,15 @@
       return response;
     }
 
+    async function parseJsonResponse(response) {
+      const raw = await response.text();
+      try {
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error(`服务器返回异常（HTTP ${response.status}），后端可能未正常运行，请稍后重试。`);
+      }
+    }
+
     async function verifySession() {
       if (!authToken) {
         redirectToLogin();
@@ -321,7 +330,7 @@
       if (!response.ok) {
         throw new Error("加载项目失败。");
       }
-      return response.json();
+      return parseJsonResponse(response);
     }
 
     async function fetchProject(id) {
@@ -329,7 +338,7 @@
       if (!response.ok) {
         throw new Error("加载项目详情失败。");
       }
-      return response.json();
+      return parseJsonResponse(response);
     }
 
     async function renderProjects() {
@@ -375,7 +384,7 @@
         body: formData
       });
 
-      const result = await response.json();
+      const result = await parseJsonResponse(response);
       if (!response.ok) {
         throw new Error(result.message || "视频上传失败。");
       }
@@ -405,7 +414,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        const result = await response.json();
+        const result = await parseJsonResponse(response);
         if (!response.ok) {
           throw new Error(result.message || "请求失败。");
         }
@@ -465,7 +474,7 @@
 
         try {
           const response = await authFetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
-          const result = await response.json();
+          const result = await parseJsonResponse(response);
           if (!response.ok) {
             throw new Error(result.message || "删除失败。");
           }

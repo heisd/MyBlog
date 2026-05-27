@@ -80,6 +80,14 @@ function formatDate(date = new Date()) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
+function normalizeDate(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
 function slugify(input) {
   return String(input || "")
     .toLowerCase()
@@ -345,10 +353,14 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
+    if (req.body.date && !normalizeDate(req.body.date)) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
+
     const project = {
       id: await ensureUniqueProjectId(req.body.title),
       title: req.body.title.trim(),
-      date: req.body.date ? formatDate(req.body.date) : formatDate(),
+      date: req.body.date ? normalizeDate(req.body.date) : formatDate(),
       summary: req.body.summary.trim(),
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
@@ -378,6 +390,10 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
+    if (req.body.date && !normalizeDate(req.body.date)) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
+
     const { data: existing, error: readError } = await supabase
       .from("projects")
       .select("*")
@@ -398,7 +414,7 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
-      date: req.body.date ? formatDate(req.body.date) : existing.date,
+      date: req.body.date ? normalizeDate(req.body.date) : existing.date,
       updated_at: new Date().toISOString(),
     };
 
