@@ -467,6 +467,18 @@ app.get("/", async (req, res) => {
   }
 });
 
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({ message: err.message || "Internal server error" });
+});
+
 ensureVideoBucket().finally(() => {
   app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
