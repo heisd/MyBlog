@@ -269,6 +269,15 @@
       message.style.color = isError ? "#b91c1c" : "#64748b";
     }
 
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
     function resetForm(statusText = "已进入后台，可以开始管理项目。") {
       editingId = null;
       form.reset();
@@ -352,14 +361,14 @@
         projectList.innerHTML = projects.map((project) => `
           <article class="project-card">
             <div class="meta-row">
-              <span>${project.date || "未设置日期"}</span>
+              <span>${escapeHtml(project.date || "未设置日期")}</span>
               <span class="meta-pill">${project.videoUrl ? "含视频" : "无视频"}</span>
             </div>
-            <h3>${project.title}</h3>
-            <p>${project.summary}</p>
+            <h3>${escapeHtml(project.title)}</h3>
+            <p>${escapeHtml(project.summary)}</p>
             <div class="card-actions">
-              <button class="secondary" data-action="edit" data-id="${project.id}">编辑</button>
-              <button class="danger" data-action="delete" data-id="${project.id}">删除</button>
+              <button class="secondary" data-action="edit" data-id="${escapeHtml(project.id)}">编辑</button>
+              <button class="danger" data-action="delete" data-id="${escapeHtml(project.id)}">删除</button>
             </div>
           </article>
         `).join("");

@@ -184,12 +184,12 @@
 
         root.className = "";
         root.innerHTML = `
-          <img class="cover" src="${project.coverImage}" alt="${project.title}">
+          <img class="cover" src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}">
           ${renderVideo(project.videoUrl)}
           <article>
-            <div class="meta">${project.date || "未设置日期"}</div>
-            <h1>${project.title}</h1>
-            <div class="summary">${project.summary}</div>
+            <div class="meta">${escapeHtml(project.date || "未设置日期")}</div>
+            <h1>${escapeHtml(project.title)}</h1>
+            <div class="summary">${escapeHtml(project.summary)}</div>
             <div class="content">${project.content}</div>
           </article>
         `;
