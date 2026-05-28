@@ -7,8 +7,10 @@ const multer = require("multer");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
+app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT) || 3000;
 const VIDEO_BUCKET = process.env.SUPABASE_VIDEO_BUCKET || "project-videos";
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -49,7 +51,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 100 * 1024 * 1024,
+    fileSize: MAX_VIDEO_BYTES,
   },
 });
 
@@ -65,19 +67,18 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 
-app.use((req, res, next) => {
-  const blocked = ["/server.js", "/package.json", "/data", "/node_modules"];
-  if (blocked.some((item) => req.path === item || req.path.startsWith(`${item}/`))) {
-    return res.status(404).json({ message: "Not found" });
-  }
-  return next();
-});
-
 app.use(express.static(PUBLIC_DIR, { index: false }));
-app.use(express.static(ROOT_DIR, { index: false }));
 
 function formatDate(date = new Date()) {
   return new Date(date).toISOString().slice(0, 10);
+}
+
+function normalizeDate(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().slice(0, 10);
 }
 
 function slugify(input) {
@@ -158,6 +159,36 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+const loginAttempts = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of loginAttempts) {
+    if (now - entry.start > LOGIN_WINDOW_MS) {
+      loginAttempts.delete(key);
+    }
+  }
+}, LOGIN_WINDOW_MS).unref();
+
+function loginRateLimit(req, res, next) {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const entry = loginAttempts.get(key);
+
+  if (!entry || now - entry.start > LOGIN_WINDOW_MS) {
+    loginAttempts.set(key, { start: now, count: 1 });
+    return next();
+  }
+
+  entry.count += 1;
+  if (entry.count > LOGIN_MAX_ATTEMPTS) {
+    return res.status(429).json({ message: "Too many login attempts, please try again later." });
+  }
+  return next();
+}
+
 function toListItem(project) {
   return {
     id: project.id,
@@ -223,7 +254,7 @@ async function ensureVideoBucket() {
 
   const { error: createError } = await supabase.storage.createBucket(VIDEO_BUCKET, {
     public: true,
-    fileSizeLimit: "100MB",
+    fileSizeLimit: MAX_VIDEO_BYTES,
     allowedMimeTypes: ["video/mp4", "video/webm", "video/ogg", "video/quicktime"],
   });
 
@@ -232,7 +263,7 @@ async function ensureVideoBucket() {
   }
 }
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", loginRateLimit, (req, res) => {
   const username = req.body?.username;
   const password = req.body?.password;
 
@@ -345,10 +376,14 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
+    if (req.body.date && !normalizeDate(req.body.date)) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
+
     const project = {
       id: await ensureUniqueProjectId(req.body.title),
       title: req.body.title.trim(),
-      date: req.body.date ? formatDate(req.body.date) : formatDate(),
+      date: req.body.date ? normalizeDate(req.body.date) : formatDate(),
       summary: req.body.summary.trim(),
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
@@ -378,6 +413,10 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
+    if (req.body.date && !normalizeDate(req.body.date)) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
+
     const { data: existing, error: readError } = await supabase
       .from("projects")
       .select("*")
@@ -398,7 +437,7 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
-      date: req.body.date ? formatDate(req.body.date) : existing.date,
+      date: req.body.date ? normalizeDate(req.body.date) : existing.date,
       updated_at: new Date().toISOString(),
     };
 
@@ -465,6 +504,18 @@ app.get("/", async (req, res) => {
   } catch {
     return res.sendFile(PUBLIC_INDEX);
   }
+});
+
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({ message: err.message || "Internal server error" });
 });
 
 ensureVideoBucket().finally(() => {

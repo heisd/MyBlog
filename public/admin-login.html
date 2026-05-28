@@ -167,9 +167,15 @@
           })
         });
 
-        const result = await response.json();
+        const raw = await response.text();
+        let result = {};
+        try {
+          result = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error(`服务器返回异常（HTTP ${response.status}），后端可能未正常运行，请稍后重试。`);
+        }
         if (!response.ok) {
-          throw new Error(result.message || "登录失败。");
+          throw new Error(result.message || `登录失败（HTTP ${response.status}）。`);
         }
 
         localStorage.setItem(AUTH_TOKEN_KEY, result.token);

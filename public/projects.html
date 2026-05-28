@@ -179,6 +179,15 @@
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
 
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
     async function loadProjects() {
       const container = document.getElementById("projects-list");
       container.innerHTML = "<div class='empty'>正在加载项目...</div>";
@@ -188,7 +197,12 @@
         if (!response.ok) {
           throw new Error("加载项目失败。");
         }
-        const projects = await response.json();
+        let projects;
+        try {
+          projects = await response.json();
+        } catch {
+          throw new Error("服务器返回异常，请稍后重试。");
+        }
 
         if (!projects.length) {
           container.innerHTML = "<div class='empty'>暂时还没有已发布的项目。</div>";
@@ -197,15 +211,15 @@
 
         container.innerHTML = projects.map((project) => `
           <article class="card">
-            <img src="${project.coverImage}" alt="${project.title}">
+            <img src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}">
             <div class="content">
-              <div class="meta">${project.date || "未设置日期"}</div>
-              <h2 class="title">${project.title}</h2>
-              <p class="summary">${project.summary}</p>
+              <div class="meta">${escapeHtml(project.date || "未设置日期")}</div>
+              <h2 class="title">${escapeHtml(project.title)}</h2>
+              <p class="summary">${escapeHtml(project.summary)}</p>
               <div class="tags">
                 ${project.videoUrl ? '<span class="tag">含演示视频</span>' : '<span class="tag">图文项目</span>'}
               </div>
-              <a class="link" href="/project/${project.id}">查看全文</a>
+              <a class="link" href="/project/${encodeURIComponent(project.id)}">查看全文</a>
             </div>
           </article>
         `).join("");
