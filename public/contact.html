@@ -338,6 +338,19 @@
     const statusEl = document.getElementById("status");
     const submitBtn = document.getElementById("submit-btn");
 
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function isValidEmail(value) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+    }
+
     function showStatus(type, html) {
       statusEl.className = `status show ${type}`;
       statusEl.innerHTML = html;
@@ -364,9 +377,15 @@
         return;
       }
 
+      if (email && !isValidEmail(email)) {
+        showStatus("error", "邮箱格式不正确，请检查后重试。");
+        return;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = "发送中...";
       statusEl.className = "status";
+      statusEl.innerHTML = "";
 
       try {
         const response = await fetch(`${API_BASE}/api/contact`, {
@@ -383,11 +402,11 @@
         }
 
         if (response.ok) {
-          showStatus("success", data.message || "留言已发送，感谢你的联系！");
+          showStatus("success", escapeHtml(data.message || "留言已发送，感谢你的联系！"));
           form.reset();
         } else {
           const fallback = buildMailtoFallback(name, email, message);
-          const base = data.message || "留言发送失败，请稍后重试。";
+          const base = escapeHtml(data.message || "留言发送失败，请稍后重试。");
           showStatus(
             "error",
             `${base} 你也可以 <a href="${fallback}">点此用邮件直接发送给我</a>。`

@@ -27,12 +27,22 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function parseBoolean(value, fallback) {
+  if (value == null || value === "") {
+    return fallback;
+  }
+  return ["true", "1", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function parsePort(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const CONTACT_TO = process.env.CONTACT_TO || "2284610019@qq.com";
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
-const SMTP_PORT = Number(process.env.SMTP_PORT) || 465;
-const SMTP_SECURE = process.env.SMTP_SECURE
-  ? process.env.SMTP_SECURE === "true"
-  : SMTP_PORT === 465;
+const SMTP_PORT = parsePort(process.env.SMTP_PORT, 465);
+const SMTP_SECURE = parseBoolean(process.env.SMTP_SECURE, SMTP_PORT === 465);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const CONTACT_FROM = process.env.CONTACT_FROM || SMTP_USER;
@@ -246,16 +256,27 @@ function contactRateLimit(req, res, next) {
   const key = req.ip || "unknown";
   const entry = contactAttempts.get(key);
 
-  if (!entry || now - entry.start > CONTACT_WINDOW_MS) {
-    contactAttempts.set(key, { start: now, count: 1 });
-    return next();
-  }
-
-  entry.count += 1;
-  if (entry.count > CONTACT_MAX_MESSAGES) {
+  if (
+    entry &&
+    now - entry.start <= CONTACT_WINDOW_MS &&
+    entry.count >= CONTACT_MAX_MESSAGES
+  ) {
     return res.status(429).json({ message: "提交过于频繁，请稍后再试。" });
   }
   return next();
+}
+
+function recordContactSend(req) {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const entry = contactAttempts.get(key);
+
+  if (!entry || now - entry.start > CONTACT_WINDOW_MS) {
+    contactAttempts.set(key, { start: now, count: 1 });
+    return;
+  }
+
+  entry.count += 1;
 }
 
 function isValidEmail(value) {
@@ -407,11 +428,12 @@ app.post("/api/contact", contactRateLimit, async (req, res) => {
     await transporter.sendMail({
       from: CONTACT_FROM,
       to: CONTACT_TO,
-      replyTo: email && isValidEmail(email) ? email : undefined,
+      replyTo: email || undefined,
       subject: `博客留言 - 来自 ${name}`,
       text: textBody,
     });
 
+    recordContactSend(req);
     return res.status(201).json({ message: "留言已发送，感谢你的联系！" });
   } catch (error) {
     console.error("Failed to send contact email:", error.message);
