@@ -617,6 +617,7 @@ app.get("/api/projects", async (req, res) => {
 
     return res.json((data || []).map(toListItem));
   } catch (error) {
+    console.error("Failed to read projects:", error.message);
     return res.status(500).json({ message: "Failed to read projects", error: error.message });
   }
 });
@@ -639,6 +640,7 @@ app.get("/api/projects/:id", async (req, res) => {
 
     return res.json(data);
   } catch (error) {
+    console.error("Failed to read project:", error.message);
     return res.status(500).json({ message: "Failed to read project", error: error.message });
   }
 });
