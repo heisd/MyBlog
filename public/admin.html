@@ -212,9 +212,20 @@
             <textarea id="summary" name="summary" required></textarea>
           </label>
           <label>
-            封面图片链接
+            封面图片链接（可粘贴外链，或用下方上传本地图片）
             <input id="coverImage" name="coverImage" type="url" required>
           </label>
+          <div class="upload-row">
+            <label>
+              本地封面图片（可选，上传后自动填入上方链接）
+              <input id="coverFile" name="coverFile" type="file" accept="image/*">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="upload-cover-button">上传本地图片</button>
+              <span id="cover-upload-status" class="upload-status">想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。</span>
+            </div>
+            <img id="cover-preview" alt="封面预览" style="display:none;max-width:100%;border-radius:12px;border:1px solid var(--line);" />
+          </div>
           <label>
             视频链接（可选）
             <input id="videoUrl" name="videoUrl" type="url" placeholder="支持 mp4 / webm 直链，或可嵌入视频链接">
@@ -234,6 +245,26 @@
             正文内容（支持 HTML）
             <textarea id="content" name="content" required></textarea>
           </label>
+          <div class="upload-row">
+            <label>
+              导入文档（.md / .markdown / .txt / .docx / .pdf）
+              <input id="docFile" name="docFile" type="file" accept=".md,.markdown,.txt,.docx,.pdf">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="import-doc-button">导入文档到正文</button>
+              <span id="doc-import-status" class="upload-status">上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。</span>
+            </div>
+          </div>
+          <div class="upload-row">
+            <label>
+              正文插图（可多选，上传后在光标处依次插入 &lt;img&gt;）
+              <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*" multiple>
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="upload-content-image-button">上传图片插入正文</button>
+              <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。</span>
+            </div>
+          </div>
           <div class="actions">
             <button class="primary" type="submit">保存项目</button>
             <button class="secondary" type="button" id="reset-button">重置表单</button>
@@ -261,6 +292,17 @@
     const logoutButton = document.getElementById("logout-button");
     const uploadVideoButton = document.getElementById("upload-video-button");
     const uploadStatus = document.getElementById("upload-status");
+    const uploadCoverButton = document.getElementById("upload-cover-button");
+    const coverUploadStatus = document.getElementById("cover-upload-status");
+    const coverPreview = document.getElementById("cover-preview");
+    const coverImageInput = document.getElementById("coverImage");
+    const uploadContentImageButton = document.getElementById("upload-content-image-button");
+    const contentImageStatus = document.getElementById("content-image-status");
+    const importDocButton = document.getElementById("import-doc-button");
+    const docImportStatus = document.getElementById("doc-import-status");
+    const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
+    const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
+    const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
     let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
@@ -283,6 +325,10 @@
       form.reset();
       formTitle.textContent = "新建项目";
       uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
+      coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
+      contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
+      docImportStatus.textContent = DEFAULT_DOC_STATUS;
+      showCoverPreview("");
       setMessage(statusText);
     }
 
@@ -403,6 +449,120 @@
       return result.videoUrl;
     }
 
+    function showCoverPreview(url) {
+      if (url) {
+        coverPreview.src = url;
+        coverPreview.style.display = "block";
+      } else {
+        coverPreview.removeAttribute("src");
+        coverPreview.style.display = "none";
+      }
+    }
+
+    async function uploadSelectedImage() {
+      const file = form.coverFile.files[0];
+      if (!file) {
+        throw new Error("请先选择一张本地图片。");
+      }
+
+      coverUploadStatus.textContent = `正在上传：${file.name}`;
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await parseJsonResponse(response);
+      if (!response.ok) {
+        throw new Error(result.message || "图片上传失败。");
+      }
+
+      form.coverImage.value = result.imageUrl;
+      showCoverPreview(result.imageUrl);
+      coverUploadStatus.textContent = "图片上传成功，链接已自动填入。";
+      return result.imageUrl;
+    }
+
+    function insertIntoContent(snippet) {
+      const textarea = form.content;
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? textarea.value.length;
+      textarea.value = textarea.value.slice(0, start) + snippet + textarea.value.slice(end);
+      const caret = start + snippet.length;
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+    }
+
+    async function uploadContentImage() {
+      const files = Array.from(form.contentImageFile.files || []);
+      if (!files.length) {
+        throw new Error("请先选择图片（可多选）。");
+      }
+
+      let done = 0;
+      for (const file of files) {
+        contentImageStatus.textContent = `正在上传（${done + 1}/${files.length}）：${file.name}`;
+        const formData = new FormData();
+        formData.append("image", file);
+
+        const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await parseJsonResponse(response);
+        if (!response.ok) {
+          throw new Error(result.message || `「${file.name}」上传失败。`);
+        }
+
+        const snippet = `\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`;
+        insertIntoContent(snippet);
+        done += 1;
+      }
+
+      contentImageStatus.textContent = `已上传并插入 ${done} 张图片。`;
+      form.contentImageFile.value = "";
+    }
+
+    async function importDocument() {
+      const file = form.docFile.files[0];
+      if (!file) {
+        throw new Error("请先选择一个文档文件（.md / .docx / .pdf 等）。");
+      }
+
+      docImportStatus.textContent = `正在解析：${file.name}`;
+      const formData = new FormData();
+      formData.append("document", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/document`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await parseJsonResponse(response);
+      if (!response.ok) {
+        throw new Error(result.message || "文档解析失败。");
+      }
+
+      insertIntoContent(result.html || "");
+
+      const filled = [];
+      if (result.title && !form.title.value.trim()) {
+        form.title.value = result.title;
+        filled.push("标题");
+      }
+      if (result.summary && !form.summary.value.trim()) {
+        form.summary.value = result.summary;
+        filled.push("摘要");
+      }
+
+      const headings = (result.outline || []).length;
+      docImportStatus.textContent = `已导入正文${headings ? `（识别 ${headings} 个标题/目录）` : ""}${filled.length ? `，并自动填入${filled.join("、")}` : ""}。请检查后保存。`;
+      form.docFile.value = "";
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -445,6 +605,35 @@
       }
     });
 
+    uploadCoverButton.addEventListener("click", async () => {
+      try {
+        await uploadSelectedImage();
+      } catch (error) {
+        coverUploadStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
+
+    coverImageInput.addEventListener("input", () => showCoverPreview(coverImageInput.value.trim()));
+
+    uploadContentImageButton.addEventListener("click", async () => {
+      try {
+        await uploadContentImage();
+      } catch (error) {
+        contentImageStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
+
+    importDocButton.addEventListener("click", async () => {
+      try {
+        await importDocument();
+      } catch (error) {
+        docImportStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
+
     logoutButton.addEventListener("click", async () => {
       try {
         await authFetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
@@ -469,6 +658,8 @@
           form.coverImage.value = project.coverImage;
           form.videoUrl.value = project.videoUrl || "";
           form.content.value = project.content;
+          showCoverPreview(project.coverImage);
+          coverUploadStatus.textContent = "当前封面已填入。你也可以重新上传本地图片覆盖它。";
           uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
           setMessage(`正在编辑《${project.title}》。`);
           window.scrollTo({ top: 0, behavior: "smooth" });
