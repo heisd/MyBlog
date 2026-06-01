@@ -228,6 +228,12 @@
       color: var(--accent-dark);
     }
 
+    .status.info {
+      background: rgba(204, 106, 45, 0.08);
+      border: 1px solid rgba(204, 106, 45, 0.28);
+      color: var(--accent-dark);
+    }
+
     .status a {
       color: var(--accent-dark);
       font-weight: 700;
@@ -356,6 +362,49 @@
       statusEl.innerHTML = html;
     }
 
+    function delay(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    // Render 免费实例闲置后会休眠，下次访问需 30~60s 冷启动，期间请求会失败
+    // 或被网关返回 5xx（响应体不是我们的 JSON）。这里带退避重试，并区分
+    // 「冷启动」与「应用本身的有效响应」（如留言接口主动返回的 503/502 JSON）。
+    const RETRY_DELAYS = [1500, 2500, 4000, 6000, 8000, 10000];
+    const COLD_START_STATUSES = new Set([502, 503, 504]);
+
+    async function fetchWithWake(url, options = {}, { retries = 6, onWaking } = {}) {
+      let lastError;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await fetch(url, options);
+          const raw = await response.text();
+          let data = null;
+          try {
+            data = raw ? JSON.parse(raw) : null;
+          } catch {
+            data = null;
+          }
+          // 5xx 且响应体不是 JSON → 多半是 Render 网关的冷启动错误页，重试。
+          const looksColdStart = COLD_START_STATUSES.has(response.status) && data === null;
+          if (looksColdStart && attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          return { ok: response.ok, status: response.status, data };
+        } catch (error) {
+          // 网络错误/超时：几乎都是冷启动或网络波动，重试。
+          lastError = error;
+          if (attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          throw lastError;
+        }
+      }
+    }
+
     function buildMailtoFallback(name, email, message) {
       const subject = encodeURIComponent(`博客留言 - 来自 ${name || "访客"}`);
       const bodyLines = [];
@@ -388,20 +437,21 @@
       statusEl.innerHTML = "";
 
       try {
-        const response = await fetch(`${API_BASE}/api/contact`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, message }),
-        });
+        const result = await fetchWithWake(
+          `${API_BASE}/api/contact`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, message }),
+          },
+          {
+            onWaking: (n) =>
+              showStatus("info", `服务器正在唤醒，请稍候…（第 ${n} 次重试）`),
+          }
+        );
 
-        let data = {};
-        try {
-          data = await response.json();
-        } catch {
-          data = {};
-        }
-
-        if (response.ok) {
+        const data = result.data || {};
+        if (result.ok) {
           showStatus("success", escapeHtml(data.message || "留言已发送，感谢你的联系！"));
           form.reset();
         } else {

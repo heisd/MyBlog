@@ -188,19 +188,67 @@
         .replaceAll("'", "&#39;");
     }
 
+    function delay(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    // Render 免费实例闲置后会休眠，下次访问需 30~60s 冷启动，期间请求会失败
+    // 或被网关返回 5xx（响应体不是我们的 JSON）。这里带退避重试，自动撑过冷启动。
+    const RETRY_DELAYS = [1500, 2500, 4000, 6000, 8000, 10000];
+    const COLD_START_STATUSES = new Set([502, 503, 504]);
+
+    async function fetchWithWake(url, options = {}, { retries = 6, onWaking } = {}) {
+      let lastError;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await fetch(url, options);
+          const raw = await response.text();
+          let data = null;
+          try {
+            data = raw ? JSON.parse(raw) : null;
+          } catch {
+            data = null;
+          }
+          const looksColdStart = COLD_START_STATUSES.has(response.status) && data === null;
+          if (looksColdStart && attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          return { ok: response.ok, status: response.status, data };
+        } catch (error) {
+          lastError = error;
+          if (attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          throw lastError;
+        }
+      }
+    }
+
     async function loadProjects() {
       const container = document.getElementById("projects-list");
       container.innerHTML = "<div class='empty'>正在加载项目...</div>";
 
       try {
-        const response = await fetch(`${API_BASE}/api/projects`);
-        if (!response.ok) {
+        const result = await fetchWithWake(
+          `${API_BASE}/api/projects`,
+          {},
+          {
+            onWaking: (n) => {
+              container.innerHTML =
+                `<div class='empty'>服务器正在唤醒，请稍候…（第 ${n} 次重试）<br>免费服务器闲置后会休眠，首次访问需要 30~60 秒。</div>`;
+            },
+          }
+        );
+
+        if (!result.ok) {
           throw new Error("加载项目失败。");
         }
-        let projects;
-        try {
-          projects = await response.json();
-        } catch {
+        const projects = result.data;
+        if (!Array.isArray(projects)) {
           throw new Error("服务器返回异常，请稍后重试。");
         }
 
