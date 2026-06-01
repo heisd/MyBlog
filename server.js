@@ -3,8 +3,15 @@ const cors = require("cors");
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const dns = require("dns");
 const multer = require("multer");
 const { createClient } = require("@supabase/supabase-js");
+
+// Render 容器没有 IPv6 出网能力，而 smtp.qq.com 等主机会解析到 IPv6 地址，
+// 导致连接报 ENETUNREACH。强制 DNS 优先返回 IPv4，避免走 IPv6。
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 const app = express();
 app.set("trust proxy", 1);
@@ -126,6 +133,8 @@ function getMailTransporter() {
       port: SMTP_PORT,
       secure: SMTP_SECURE,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // 强制走 IPv4：Render 无 IPv6 出网，QQ 邮箱解析到 IPv6 会 ENETUNREACH。
+      family: 4,
       // 加超时，避免 SMTP 配错/被拦时 sendMail 默认要卡 2 分钟，
       // 让请求快速失败并回退到前端的 mailto 兜底。
       connectionTimeout: 10000,
