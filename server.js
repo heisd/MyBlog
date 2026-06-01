@@ -388,6 +388,12 @@ async function ensureVideoBucket() {
   }
 }
 
+// 轻量健康检查端点：不访问数据库，专供 UptimeRobot 等保活监控定时 ping，
+// 让 Render 免费实例保持唤醒，避免闲置休眠后的冷启动。
+app.get("/healthz", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: Date.now() });
+});
+
 app.post("/api/auth/login", loginRateLimit, (req, res) => {
   const username = req.body?.username;
   const password = req.body?.password;
