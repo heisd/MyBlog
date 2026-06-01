@@ -110,8 +110,9 @@ ClaudeAboutWeb/
 | `POST`   | `/api/projects`     | 新建项目         |
 | `PUT`    | `/api/projects/:id` | 更新项目         |
 | `DELETE` | `/api/projects/:id` | 删除项目         |
-| `POST`   | `/api/uploads/image` | 上传封面图片（需登录），返回公开链接 |
+| `POST`   | `/api/uploads/image` | 上传封面/正文图片（需登录），返回公开链接 |
 | `POST`   | `/api/uploads/video` | 上传演示视频（需登录），返回公开链接 |
+| `POST`   | `/api/uploads/document` | 导入 MD/Word/PDF（需登录），解析为正文 HTML 并返回目录/摘要/标题 |
 | `POST`   | `/api/contact`      | 提交留言并邮件通知站长 |
 
 ## 在线留言（联系页）
@@ -287,7 +288,8 @@ CONTACT_FROM=your-account@qq.com
 - 后台新增了用户名密码登录保护，未登录不能执行创建、修改、删除操作
 - 后台现在支持上传本地视频文件，视频会进入 `Supabase Storage`
 - 后台封面图片支持两种方式：粘贴外链，或直接上传本地图片（≤ 8MB，存入 `Supabase Storage` 的 `project-covers` 桶并自动回填链接，带预览）
-- 正文编辑支持「上传图片插入正文」：上传后在光标处自动插入 `<img>` 标签（复用同一图片上传接口）
+- 正文编辑支持「上传图片插入正文」：可一次多选，上传后在光标处依次插入 `<img>` 标签（复用同一图片上传接口）
+- 正文编辑支持「导入文档」：上传 `.md/.markdown/.txt/.docx/.pdf`，后端用 `marked`（Markdown）、`mammoth`（Word）、`pdf-parse`（PDF）解析为正文 HTML，自动提取**目录**（h1–h3 生成带锚点的 TOC）、**摘要**（首段）与**标题**（首个标题），标题/摘要仅在为空时自动填入，文档本身不入库
 
 ## 性能与可用性：冷启动与前端重试
 

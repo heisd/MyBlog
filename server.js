@@ -20,6 +20,7 @@ const VIDEO_BUCKET = process.env.SUPABASE_VIDEO_BUCKET || "project-videos";
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "project-covers";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -123,6 +124,13 @@ const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_IMAGE_BYTES,
+  },
+});
+
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_DOCUMENT_BYTES,
   },
 });
 
@@ -512,6 +520,94 @@ async function ensureImageBucket() {
   }
 }
 
+function escapeHtmlText(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function htmlToPlainText(html) {
+  return String(html || "")
+    .replace(/<\/(p|div|h[1-6]|li|br|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// 把纯文本（.txt 或 PDF 抽取出的文字）转成 HTML 段落，并做转义。
+function plainTextToHtml(text) {
+  const paragraphs = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return paragraphs
+    .map((p) => `<p>${escapeHtmlText(p).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}
+
+// 给 h1-h3 注入 id（便于目录跳转），并收集大纲（目录）。
+function addHeadingAnchors(html) {
+  const outline = [];
+  let index = 0;
+  const withIds = String(html || "").replace(
+    /<h([1-3])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+    (match, level, attrs, inner) => {
+      const text = htmlToPlainText(inner).trim();
+      if (!text) {
+        return match;
+      }
+      const id = `doc-heading-${index++}`;
+      outline.push({ level: Number(level), text, id });
+      if (/\sid\s*=/i.test(attrs)) {
+        return match;
+      }
+      return `<h${level}${attrs} id="${id}">${inner}</h${level}>`;
+    }
+  );
+  return { html: withIds, outline };
+}
+
+function buildTocHtml(outline) {
+  if (outline.length < 2) {
+    return "";
+  }
+  const items = outline
+    .map(
+      (h) =>
+        `<li style="margin-left:${(h.level - 1) * 16}px;"><a href="#${h.id}">${escapeHtmlText(h.text)}</a></li>`
+    )
+    .join("");
+  return `<nav class="toc"><strong>目录</strong><ul>${items}</ul></nav>\n`;
+}
+
+function deriveSummary(plainText, maxLen = 120) {
+  const firstPara =
+    String(plainText || "")
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) || "";
+  const cleaned = firstPara.replace(/\s+/g, " ").trim();
+  return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen).trim()}…`;
+}
+
+// 取第一个 <p> 段落的纯文本，作为摘要来源（跳过标题）。
+function firstParagraphText(html) {
+  const match = String(html || "").match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+  return match ? htmlToPlainText(match[1]) : "";
+}
+
 // 轻量健康检查端点：不访问数据库，专供 UptimeRobot 等保活监控定时 ping，
 // 让 Render 免费实例保持唤醒，避免闲置休眠后的冷启动。
 app.get("/healthz", (req, res) => {
@@ -699,6 +795,61 @@ app.post("/api/uploads/image", requireAdmin, imageUpload.single("image"), async 
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to upload image", error: error.message });
+  }
+});
+
+// 文档导入：上传 .md/.markdown/.txt/.docx/.pdf，自动解析为 HTML，并提取目录/摘要/标题。
+// 文件本身不入库，只返回解析结果供后台填充表单。
+app.post("/api/uploads/document", requireAdmin, documentUpload.single("document"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No document uploaded" });
+    }
+
+    const ext = path.extname(req.file.originalname || "").toLowerCase();
+    let rawHtml = "";
+
+    if (ext === ".md" || ext === ".markdown") {
+      const { marked } = require("marked");
+      rawHtml = marked.parse(req.file.buffer.toString("utf8"));
+    } else if (ext === ".txt") {
+      rawHtml = plainTextToHtml(req.file.buffer.toString("utf8"));
+    } else if (ext === ".docx") {
+      const mammoth = require("mammoth");
+      const result = await mammoth.convertToHtml({ buffer: req.file.buffer });
+      rawHtml = result.value || "";
+    } else if (ext === ".pdf") {
+      const { PDFParse } = require("pdf-parse");
+      const parser = new PDFParse({ data: req.file.buffer });
+      try {
+        const parsed = await parser.getText();
+        rawHtml = plainTextToHtml(parsed.text || "");
+      } finally {
+        await parser.destroy();
+      }
+    } else {
+      return res
+        .status(400)
+        .json({ message: "仅支持 .md / .markdown / .txt / .docx / .pdf 文件" });
+    }
+
+    const { html: htmlWithIds, outline } = addHeadingAnchors(rawHtml);
+    const toc = buildTocHtml(outline);
+    const plain = htmlToPlainText(htmlWithIds);
+    const summary = deriveSummary(firstParagraphText(htmlWithIds) || plain);
+    const title = (outline[0] && outline[0].text) || deriveSummary(plain, 60);
+
+    return res.status(201).json({
+      html: toc + htmlWithIds,
+      outline: outline.map(({ level, text }) => ({ level, text })),
+      summary,
+      title,
+    });
+  } catch (error) {
+    console.error("Failed to import document:", error.message);
+    return res
+      .status(500)
+      .json({ message: "文档解析失败，请确认文件格式是否正确。", error: error.message });
   }
 });
 

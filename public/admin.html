@@ -247,12 +247,22 @@
           </label>
           <div class="upload-row">
             <label>
-              正文插图（上传后在光标处插入 &lt;img&gt;）
-              <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*">
+              导入文档（.md / .markdown / .txt / .docx / .pdf）
+              <input id="docFile" name="docFile" type="file" accept=".md,.markdown,.txt,.docx,.pdf">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="import-doc-button">导入文档到正文</button>
+              <span id="doc-import-status" class="upload-status">上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。</span>
+            </div>
+          </div>
+          <div class="upload-row">
+            <label>
+              正文插图（可多选，上传后在光标处依次插入 &lt;img&gt;）
+              <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*" multiple>
             </label>
             <div class="upload-actions">
               <button class="secondary" type="button" id="upload-content-image-button">上传图片插入正文</button>
-              <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择文件后点这里（≤ 8MB）。</span>
+              <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。</span>
             </div>
           </div>
           <div class="actions">
@@ -288,8 +298,11 @@
     const coverImageInput = document.getElementById("coverImage");
     const uploadContentImageButton = document.getElementById("upload-content-image-button");
     const contentImageStatus = document.getElementById("content-image-status");
+    const importDocButton = document.getElementById("import-doc-button");
+    const docImportStatus = document.getElementById("doc-import-status");
+    const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
     const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
-    const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择文件后点这里（≤ 8MB）。";
+    const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
     let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
@@ -314,6 +327,7 @@
       uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
       coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
       contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
+      docImportStatus.textContent = DEFAULT_DOC_STATUS;
       showCoverPreview("");
       setMessage(statusText);
     }
@@ -482,30 +496,71 @@
     }
 
     async function uploadContentImage() {
-      const file = form.contentImageFile.files[0];
-      if (!file) {
-        throw new Error("请先选择一张图片。");
+      const files = Array.from(form.contentImageFile.files || []);
+      if (!files.length) {
+        throw new Error("请先选择图片（可多选）。");
       }
 
-      contentImageStatus.textContent = `正在上传：${file.name}`;
-      const formData = new FormData();
-      formData.append("image", file);
+      let done = 0;
+      for (const file of files) {
+        contentImageStatus.textContent = `正在上传（${done + 1}/${files.length}）：${file.name}`;
+        const formData = new FormData();
+        formData.append("image", file);
 
-      const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+        const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await parseJsonResponse(response);
+        if (!response.ok) {
+          throw new Error(result.message || `「${file.name}」上传失败。`);
+        }
+
+        const snippet = `\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`;
+        insertIntoContent(snippet);
+        done += 1;
+      }
+
+      contentImageStatus.textContent = `已上传并插入 ${done} 张图片。`;
+      form.contentImageFile.value = "";
+    }
+
+    async function importDocument() {
+      const file = form.docFile.files[0];
+      if (!file) {
+        throw new Error("请先选择一个文档文件（.md / .docx / .pdf 等）。");
+      }
+
+      docImportStatus.textContent = `正在解析：${file.name}`;
+      const formData = new FormData();
+      formData.append("document", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/document`, {
         method: "POST",
         body: formData
       });
 
       const result = await parseJsonResponse(response);
       if (!response.ok) {
-        throw new Error(result.message || "图片上传失败。");
+        throw new Error(result.message || "文档解析失败。");
       }
 
-      const snippet = `\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`;
-      insertIntoContent(snippet);
-      contentImageStatus.textContent = "图片已上传并插入正文。";
-      form.contentImageFile.value = "";
-      return result.imageUrl;
+      insertIntoContent(result.html || "");
+
+      const filled = [];
+      if (result.title && !form.title.value.trim()) {
+        form.title.value = result.title;
+        filled.push("标题");
+      }
+      if (result.summary && !form.summary.value.trim()) {
+        form.summary.value = result.summary;
+        filled.push("摘要");
+      }
+
+      const headings = (result.outline || []).length;
+      docImportStatus.textContent = `已导入正文${headings ? `（识别 ${headings} 个标题/目录）` : ""}${filled.length ? `，并自动填入${filled.join("、")}` : ""}。请检查后保存。`;
+      form.docFile.value = "";
     }
 
     form.addEventListener("submit", async (event) => {
@@ -566,6 +621,15 @@
         await uploadContentImage();
       } catch (error) {
         contentImageStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
+
+    importDocButton.addEventListener("click", async () => {
+      try {
+        await importDocument();
+      } catch (error) {
+        docImportStatus.textContent = error.message;
         setMessage(error.message, true);
       }
     });
