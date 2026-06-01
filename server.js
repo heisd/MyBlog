@@ -27,6 +27,26 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function parseBoolean(value, fallback) {
+  if (value == null || value === "") {
+    return fallback;
+  }
+  return ["true", "1", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function parsePort(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const CONTACT_TO = process.env.CONTACT_TO || "2284610019@qq.com";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.qq.com";
+const SMTP_PORT = parsePort(process.env.SMTP_PORT, 465);
+const SMTP_SECURE = parseBoolean(process.env.SMTP_SECURE, SMTP_PORT === 465);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const CONTACT_FROM = process.env.CONTACT_FROM || SMTP_USER;
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -54,6 +74,35 @@ const upload = multer({
     fileSize: MAX_VIDEO_BYTES,
   },
 });
+
+let mailTransporter = null;
+let mailTransporterFailed = false;
+
+function getMailTransporter() {
+  if (mailTransporter || mailTransporterFailed) {
+    return mailTransporter;
+  }
+
+  if (!SMTP_USER || !SMTP_PASS) {
+    mailTransporterFailed = true;
+    return null;
+  }
+
+  try {
+    const nodemailer = require("nodemailer");
+    mailTransporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  } catch (error) {
+    mailTransporterFailed = true;
+    console.error("Failed to create mail transporter:", error.message);
+  }
+
+  return mailTransporter;
+}
 
 app.use(
   cors({
@@ -189,6 +238,51 @@ function loginRateLimit(req, res, next) {
   return next();
 }
 
+const CONTACT_WINDOW_MS = 60 * 60 * 1000;
+const CONTACT_MAX_MESSAGES = 5;
+const contactAttempts = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of contactAttempts) {
+    if (now - entry.start > CONTACT_WINDOW_MS) {
+      contactAttempts.delete(key);
+    }
+  }
+}, CONTACT_WINDOW_MS).unref();
+
+function contactRateLimit(req, res, next) {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const entry = contactAttempts.get(key);
+
+  if (
+    entry &&
+    now - entry.start <= CONTACT_WINDOW_MS &&
+    entry.count >= CONTACT_MAX_MESSAGES
+  ) {
+    return res.status(429).json({ message: "提交过于频繁，请稍后再试。" });
+  }
+  return next();
+}
+
+function recordContactSend(req) {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const entry = contactAttempts.get(key);
+
+  if (!entry || now - entry.start > CONTACT_WINDOW_MS) {
+    contactAttempts.set(key, { start: now, count: 1 });
+    return;
+  }
+
+  entry.count += 1;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
 function toListItem(project) {
   return {
     id: project.id,
@@ -292,6 +386,62 @@ app.get("/api/auth/verify", (req, res) => {
 
 app.post("/api/auth/logout", (req, res) => {
   return res.json({ success: true });
+});
+
+app.post("/api/contact", contactRateLimit, async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const email = String(req.body?.email || "").trim();
+  const message = String(req.body?.message || "").trim();
+
+  if (!name || !message) {
+    return res.status(400).json({ message: "请填写你的称呼和留言内容。" });
+  }
+
+  if (name.length > 120 || message.length > 5000) {
+    return res.status(400).json({ message: "留言内容过长，请精简后再提交。" });
+  }
+
+  if (email && !isValidEmail(email)) {
+    return res.status(400).json({ message: "邮箱格式不正确，请检查后重试。" });
+  }
+
+  const transporter = getMailTransporter();
+  if (!transporter) {
+    return res.status(503).json({
+      message: "在线发送暂未配置，请通过邮箱直接联系。",
+      fallbackEmail: CONTACT_TO,
+    });
+  }
+
+  const submittedAt = new Date().toISOString();
+  const textBody = [
+    `来自博客的新留言`,
+    `时间：${submittedAt}`,
+    `称呼：${name}`,
+    `邮箱：${email || "未提供"}`,
+    ``,
+    `留言内容：`,
+    message,
+  ].join("\n");
+
+  try {
+    await transporter.sendMail({
+      from: CONTACT_FROM,
+      to: CONTACT_TO,
+      replyTo: email || undefined,
+      subject: `博客留言 - 来自 ${name}`,
+      text: textBody,
+    });
+
+    recordContactSend(req);
+    return res.status(201).json({ message: "留言已发送，感谢你的联系！" });
+  } catch (error) {
+    console.error("Failed to send contact email:", error.message);
+    return res.status(502).json({
+      message: "留言发送失败，请稍后重试或直接邮件联系。",
+      fallbackEmail: CONTACT_TO,
+    });
+  }
 });
 
 app.post("/api/uploads/video", requireAdmin, upload.single("video"), async (req, res) => {
@@ -483,6 +633,10 @@ app.delete("/api/projects/:id", requireAdmin, async (req, res) => {
 
 app.get("/projects", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "projects.html"));
+});
+
+app.get("/contact", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "contact.html"));
 });
 
 app.get("/project/:id", (req, res) => {

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>联系我 | Heisd.Stark</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --paper: rgba(255, 253, 247, 0.9);
+      --card: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6b625b;
+      --accent: #cc6a2d;
+      --accent-dark: #8e4317;
+      --line: #e5dbcf;
+      --shadow: 0 22px 50px rgba(68, 48, 30, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(248, 244, 237, 0.78);
+      border-bottom: 1px solid rgba(229, 219, 207, 0.9);
+    }
+
+    .topbar-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-weight: 700;
+      color: var(--accent-dark);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.95rem;
+    }
+
+    .nav {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+
+    .nav a:hover {
+      color: var(--accent-dark);
+    }
+
+    .section {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 64px 24px;
+    }
+
+    .section-head {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .section-kicker {
+      color: var(--accent-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .section h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+    }
+
+    .section-desc {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.85;
+      max-width: 64ch;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 0.85fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--paper);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      padding: 30px;
+    }
+
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 1.3rem;
+    }
+
+    .panel p,
+    .panel li {
+      color: var(--muted);
+      line-height: 1.85;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .field label {
+      font-weight: 700;
+      font-size: 0.98rem;
+    }
+
+    .field .hint {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffefb;
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 1rem;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(204,106,45,0.14);
+    }
+
+    .field textarea {
+      min-height: 160px;
+      resize: vertical;
+      line-height: 1.7;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 26px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 1rem;
+      background: var(--accent);
+      color: #fff;
+      transition: transform 180ms ease, box-shadow 180ms ease, opacity 160ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px rgba(31, 31, 31, 0.12);
+    }
+
+    .button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      line-height: 1.7;
+      display: none;
+    }
+
+    .status.show { display: block; }
+
+    .status.success {
+      background: rgba(72, 145, 73, 0.12);
+      border: 1px solid rgba(72, 145, 73, 0.4);
+      color: #2f6b30;
+    }
+
+    .status.error {
+      background: rgba(204, 106, 45, 0.12);
+      border: 1px solid rgba(204, 106, 45, 0.4);
+      color: var(--accent-dark);
+    }
+
+    .status a {
+      color: var(--accent-dark);
+      font-weight: 700;
+    }
+
+    .info-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 18px;
+    }
+
+    .info-list .label {
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-dark);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .info-list .value {
+      color: var(--muted);
+      word-break: break-all;
+    }
+
+    .info-list a.value {
+      color: var(--accent-dark);
+      text-decoration: none;
+    }
+
+    .info-list a.value:hover { text-decoration: underline; }
+
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/projects">项目归档</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="section">
+    <div class="section-head">
+      <div class="section-kicker">Get in Touch</div>
+      <h1>给我留言</h1>
+      <p class="section-desc">如果你想交流机器人、AI 辅助开发，或者一起讨论一个项目方向，欢迎在下面给我留言。提交后，你的消息会直接发送到我的邮箱，我会尽快回复你。</p>
+    </div>
+
+    <div class="layout">
+      <section class="panel">
+        <h2>发送消息</h2>
+        <p>带 <strong>*</strong> 的为必填项。如果填写了邮箱，我可以更方便地回复你。</p>
+        <form id="contact-form" novalidate>
+          <div class="field">
+            <label for="name">你的称呼 <span style="color:var(--accent-dark)">*</span></label>
+            <input id="name" name="name" type="text" maxlength="120" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="email">你的邮箱 <span class="hint">（选填，方便我回复你）</span></label>
+            <input id="email" name="email" type="email" maxlength="200" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="message">留言内容 <span style="color:var(--accent-dark)">*</span></label>
+            <textarea id="message" name="message" maxlength="5000" required></textarea>
+          </div>
+          <button class="button" id="submit-btn" type="submit">发送留言</button>
+          <div id="status" class="status"></div>
+        </form>
+      </section>
+
+      <aside class="panel">
+        <h2>其他联系方式</h2>
+        <p>你也可以通过下面的方式直接找到我。</p>
+        <ul class="info-list">
+          <li>
+            <div class="label">邮箱</div>
+            <a class="value" href="mailto:2284610019@qq.com">2284610019@qq.com</a>
+          </li>
+          <li>
+            <div class="label">电话</div>
+            <div class="value">15138357029</div>
+          </li>
+          <li>
+            <div class="label">关于</div>
+            <div class="value">机器人控制、计算机视觉与 AI 辅助开发方向的学生与创作者。</div>
+          </li>
+        </ul>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const CONTACT_EMAIL = "2284610019@qq.com";
+
+    const form = document.getElementById("contact-form");
+    const statusEl = document.getElementById("status");
+    const submitBtn = document.getElementById("submit-btn");
+
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function isValidEmail(value) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+    }
+
+    function showStatus(type, html) {
+      statusEl.className = `status show ${type}`;
+      statusEl.innerHTML = html;
+    }
+
+    function buildMailtoFallback(name, email, message) {
+      const subject = encodeURIComponent(`博客留言 - 来自 ${name || "访客"}`);
+      const bodyLines = [];
+      if (email) bodyLines.push(`我的邮箱：${email}`);
+      bodyLines.push("", message || "");
+      const body = encodeURIComponent(bodyLines.join("\n"));
+      return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const message = document.getElementById("message").value.trim();
+
+      if (!name || !message) {
+        showStatus("error", "请填写你的称呼和留言内容。");
+        return;
+      }
+
+      if (email && !isValidEmail(email)) {
+        showStatus("error", "邮箱格式不正确，请检查后重试。");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "发送中...";
+      statusEl.className = "status";
+      statusEl.innerHTML = "";
+
+      try {
+        const response = await fetch(`${API_BASE}/api/contact`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, message }),
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+
+        if (response.ok) {
+          showStatus("success", escapeHtml(data.message || "留言已发送，感谢你的联系！"));
+          form.reset();
+        } else {
+          const fallback = buildMailtoFallback(name, email, message);
+          const base = escapeHtml(data.message || "留言发送失败，请稍后重试。");
+          showStatus(
+            "error",
+            `${base} 你也可以 <a href="${fallback}">点此用邮件直接发送给我</a>。`
+          );
+        }
+      } catch (error) {
+        const fallback = buildMailtoFallback(name, email, message);
+        showStatus(
+          "error",
+          `网络异常，留言暂时无法发送。你可以 <a href="${fallback}">点此用邮件直接发送给我</a>。`
+        );
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "发送留言";
+      }
+    });
+  </script>
+</body>
+</html>

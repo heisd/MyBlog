@@ -52,6 +52,7 @@ sequenceDiagram
 - 首页
 - 项目列表页
 - 项目详情页
+- 在线留言页（联系页）
 - 后台登录页
 - 后台管理页
 
@@ -71,6 +72,7 @@ ClaudeAboutWeb/
     ├── index.html
     ├── projects.html
     ├── project-detail.html
+    ├── contact.html
     └── admin.html
 ```
 
@@ -87,6 +89,7 @@ ClaudeAboutWeb/
 - `/`：博客首页
 - `/projects`：项目列表页
 - `/project/:id`：项目详情页
+- `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
 
@@ -107,6 +110,17 @@ ClaudeAboutWeb/
 | `POST`   | `/api/projects`     | 新建项目         |
 | `PUT`    | `/api/projects/:id` | 更新项目         |
 | `DELETE` | `/api/projects/:id` | 删除项目         |
+| `POST`   | `/api/contact`      | 提交留言并邮件通知站长 |
+
+## 在线留言（联系页）
+
+访客在 `/contact` 页面填写称呼、邮箱（选填）和留言内容后，前端会调用 `POST /api/contact`，后端通过 SMTP 把留言邮件发送到 `CONTACT_TO`（默认 `2284610019@qq.com`）。
+
+- 收件箱：由 `CONTACT_TO` 控制，默认即为 `2284610019@qq.com`
+- 发件依赖 SMTP，需要配置 `SMTP_USER` 和 `SMTP_PASS`（QQ 邮箱使用「授权码」而非登录密码）
+- 接口带有频率限制：同一 IP 每小时最多发送 5 条
+- 若邮箱填写了，邮件会带上 `Reply-To`，方便直接回复
+- 如果服务端尚未配置 SMTP，接口返回 503，前端会自动降级为 `mailto:` 链接，访客仍可一键用邮件联系
 
 ## Supabase 数据表
 
@@ -152,6 +166,15 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
 ADMIN_SESSION_SECRET=change-this-random-secret
 PORT=3000
+
+# 在线留言邮件发送（联系页）
+CONTACT_TO=2284610019@qq.com
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-account@qq.com
+SMTP_PASS=your-smtp-authorization-code
+CONTACT_FROM=your-account@qq.com
 ```
 
 ### 3. 启动服务
@@ -201,6 +224,13 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
 ADMIN_SESSION_SECRET=change-this-random-secret
 NODE_ENV=production
+CONTACT_TO=2284610019@qq.com
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-account@qq.com
+SMTP_PASS=your-smtp-authorization-code
+CONTACT_FROM=your-account@qq.com
 ```
 
 ### 数据库部署到 Supabase

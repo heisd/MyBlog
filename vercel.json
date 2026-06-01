@@ -5,6 +5,10 @@
       "destination": "/projects.html"
     },
     {
+      "source": "/contact",
+      "destination": "/contact.html"
+    },
+    {
       "source": "/admin",
       "destination": "/admin.html"
     },
