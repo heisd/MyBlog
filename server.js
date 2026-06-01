@@ -116,7 +116,7 @@ const upload = multer({
 let mailTransporter = null;
 let mailTransporterFailed = false;
 
-function getMailTransporter() {
+async function getMailTransporter() {
   if (mailTransporter || mailTransporterFailed) {
     return mailTransporter;
   }
@@ -128,13 +128,32 @@ function getMailTransporter() {
 
   try {
     const nodemailer = require("nodemailer");
+
+    // Render 容器没有 IPv6 出网，而 nodemailer 用 dns.resolve4(c-ares) 解析，
+    // 该环境下常拿不到 A 记录、只剩 AAAA，于是连 IPv6 报 ENETUNREACH。
+    // 这里改用 dns.lookup（系统解析器 getaddrinfo，在容器里更可靠）强取一个
+    // IPv4 直接作为 host 传入，并用 servername 保留主机名做 SNI / 证书校验。
+    let host = SMTP_HOST;
+    let servername;
+    try {
+      const resolved = await dns.promises.lookup(SMTP_HOST, { family: 4 });
+      if (resolved && resolved.address) {
+        host = resolved.address;
+        servername = SMTP_HOST;
+      }
+    } catch (lookupError) {
+      console.warn(
+        "IPv4 lookup for SMTP host failed, falling back to hostname:",
+        lookupError.message
+      );
+    }
+
     mailTransporter = nodemailer.createTransport({
-      host: SMTP_HOST,
+      host,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
+      ...(servername ? { servername } : {}),
       auth: { user: SMTP_USER, pass: SMTP_PASS },
-      // 强制走 IPv4：Render 无 IPv6 出网，QQ 邮箱解析到 IPv6 会 ENETUNREACH。
-      family: 4,
       // 加超时，避免 SMTP 配错/被拦时 sendMail 默认要卡 2 分钟，
       // 让请求快速失败并回退到前端的 mailto 兜底。
       connectionTimeout: 10000,
@@ -456,7 +475,7 @@ app.post("/api/contact", contactRateLimit, async (req, res) => {
     return res.status(400).json({ message: "邮箱格式不正确，请检查后重试。" });
   }
 
-  const transporter = getMailTransporter();
+  const transporter = await getMailTransporter();
   if (!transporter) {
     return res.status(503).json({
       message: "在线发送暂未配置，请通过邮箱直接联系。",
