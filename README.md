@@ -122,6 +122,21 @@ ClaudeAboutWeb/
 - 若邮箱填写了，邮件会带上 `Reply-To`，方便直接回复
 - 如果服务端尚未配置 SMTP，接口返回 503，前端会自动降级为 `mailto:` 链接，访客仍可一键用邮件联系
 
+## CORS 跨域配置
+
+前端（Vercel）与后端（Render）不同源，后端通过环境变量 `CORS_ORIGIN` 控制允许访问的前端域名。若页面出现 `Not allowed by CORS`，说明当前访问的域名不在白名单里。
+
+- 多个域名用英文逗号隔开，**不要带结尾斜杠**（如 `https://xxx.vercel.app/` 会匹配失败）
+- 匹配**忽略大小写并自动去掉结尾斜杠**，避免常见的格式踩坑
+- 支持 `*` 通配符：配一条 `https://*.vercel.app` 即可同时覆盖正式域名和所有 Vercel **预览部署**域名（预览 URL 每个分支都不同）
+- `CORS_ORIGIN` 留空表示放行所有来源（仅建议本地开发使用）
+
+示例：
+
+```env
+CORS_ORIGIN=https://your-frontend-domain.vercel.app,https://*.vercel.app
+```
+
 ## Supabase 数据表
 
 项目数据存储在 `projects` 表中，推荐结构如下：
@@ -161,7 +176,7 @@ npm install
 ```env
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-secret-key
-CORS_ORIGIN=https://your-frontend-domain.vercel.app
+CORS_ORIGIN=https://your-frontend-domain.vercel.app,https://*.vercel.app
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
 ADMIN_SESSION_SECRET=change-this-random-secret
@@ -219,7 +234,7 @@ node server.js
 ```env
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-secret-key
-CORS_ORIGIN=https://your-frontend-domain.vercel.app
+CORS_ORIGIN=https://your-frontend-domain.vercel.app,https://*.vercel.app
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
 ADMIN_SESSION_SECRET=change-this-random-secret

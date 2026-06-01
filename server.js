@@ -27,6 +27,37 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function normalizeOrigin(origin) {
+  return String(origin || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+// Turn an allowlist entry into a matcher. Entries may contain "*" wildcards
+// (e.g. "https://*.vercel.app") so a single rule can cover production plus
+// every Vercel preview deployment. Matching is case-insensitive and ignores
+// a trailing slash, which are the two most common CORS_ORIGIN footguns.
+function buildOriginMatcher(pattern) {
+  const normalized = normalizeOrigin(pattern);
+  if (!normalized.includes("*")) {
+    return (origin) => origin === normalized;
+  }
+  const escaped = normalized
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[^/]*");
+  const regex = new RegExp(`^${escaped}$`);
+  return (origin) => regex.test(origin);
+}
+
+const originMatchers = allowedOrigins.map(buildOriginMatcher);
+
+function isAllowedOrigin(origin) {
+  const normalized = normalizeOrigin(origin);
+  return originMatchers.some((match) => match(normalized));
+}
+
 function parseBoolean(value, fallback) {
   if (value == null || value === "") {
     return fallback;
@@ -107,7 +138,7 @@ function getMailTransporter() {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || !allowedOrigins.length || allowedOrigins.includes(origin)) {
+      if (!origin || !allowedOrigins.length || isAllowedOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
