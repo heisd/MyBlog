@@ -110,6 +110,8 @@ ClaudeAboutWeb/
 | `POST`   | `/api/projects`     | 新建项目         |
 | `PUT`    | `/api/projects/:id` | 更新项目         |
 | `DELETE` | `/api/projects/:id` | 删除项目         |
+| `POST`   | `/api/uploads/image` | 上传封面图片（需登录），返回公开链接 |
+| `POST`   | `/api/uploads/video` | 上传演示视频（需登录），返回公开链接 |
 | `POST`   | `/api/contact`      | 提交留言并邮件通知站长 |
 
 ## 在线留言（联系页）
@@ -284,6 +286,7 @@ CONTACT_FROM=your-account@qq.com
 - 已实际验证后台新增、编辑、删除可以写入 `Supabase`
 - 后台新增了用户名密码登录保护，未登录不能执行创建、修改、删除操作
 - 后台现在支持上传本地视频文件，视频会进入 `Supabase Storage`
+- 后台封面图片支持两种方式：粘贴外链，或直接上传本地图片（≤ 8MB，存入 `Supabase Storage` 的 `project-covers` 桶并自动回填链接，带预览）
 
 ## 性能与可用性：冷启动与前端重试
 

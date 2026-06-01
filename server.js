@@ -18,6 +18,8 @@ app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT) || 3000;
 const VIDEO_BUCKET = process.env.SUPABASE_VIDEO_BUCKET || "project-videos";
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "project-covers";
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -114,6 +116,13 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_VIDEO_BYTES,
+  },
+});
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_IMAGE_BYTES,
   },
 });
 
@@ -436,9 +445,18 @@ function guessFileExtension(file) {
     "video/webm": ".webm",
     "video/ogg": ".ogg",
     "video/quicktime": ".mov",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/avif": ".avif",
   };
 
-  return mimeMap[file.mimetype] || ".mp4";
+  if (mimeMap[file.mimetype]) {
+    return mimeMap[file.mimetype];
+  }
+  return String(file.mimetype || "").startsWith("image/") ? ".png" : ".mp4";
 }
 
 async function ensureVideoBucket() {
@@ -461,6 +479,36 @@ async function ensureVideoBucket() {
 
   if (createError) {
     console.error("Failed to create video bucket:", createError.message);
+  }
+}
+
+async function ensureImageBucket() {
+  const { data, error } = await supabase.storage.listBuckets();
+  if (error) {
+    console.error("Failed to list storage buckets:", error.message);
+    return;
+  }
+
+  const exists = (data || []).some((bucket) => bucket.name === IMAGE_BUCKET);
+  if (exists) {
+    return;
+  }
+
+  const { error: createError } = await supabase.storage.createBucket(IMAGE_BUCKET, {
+    public: true,
+    fileSizeLimit: MAX_IMAGE_BYTES,
+    allowedMimeTypes: [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/svg+xml",
+      "image/avif",
+    ],
+  });
+
+  if (createError) {
+    console.error("Failed to create image bucket:", createError.message);
   }
 }
 
@@ -616,6 +664,41 @@ app.post("/api/uploads/video", requireAdmin, upload.single("video"), async (req,
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to upload video", error: error.message });
+  }
+});
+
+app.post("/api/uploads/image", requireAdmin, imageUpload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No image file uploaded" });
+    }
+
+    if (!String(req.file.mimetype || "").startsWith("image/")) {
+      return res.status(400).json({ message: "Only image files are allowed" });
+    }
+
+    const filePath = `${Date.now()}-${slugify(path.parse(req.file.originalname).name || "cover")}${guessFileExtension(
+      req.file
+    )}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(filePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(filePath);
+    return res.status(201).json({
+      path: filePath,
+      imageUrl: data.publicUrl,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to upload image", error: error.message });
   }
 });
 
@@ -814,7 +897,7 @@ app.use((err, req, res, next) => {
   return res.status(status).json({ message: err.message || "Internal server error" });
 });
 
-ensureVideoBucket().finally(() => {
+Promise.allSettled([ensureVideoBucket(), ensureImageBucket()]).finally(() => {
   app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
   });

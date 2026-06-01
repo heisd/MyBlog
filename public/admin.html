@@ -212,9 +212,20 @@
             <textarea id="summary" name="summary" required></textarea>
           </label>
           <label>
-            封面图片链接
+            封面图片链接（可粘贴外链，或用下方上传本地图片）
             <input id="coverImage" name="coverImage" type="url" required>
           </label>
+          <div class="upload-row">
+            <label>
+              本地封面图片（可选，上传后自动填入上方链接）
+              <input id="coverFile" name="coverFile" type="file" accept="image/*">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="upload-cover-button">上传本地图片</button>
+              <span id="cover-upload-status" class="upload-status">想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。</span>
+            </div>
+            <img id="cover-preview" alt="封面预览" style="display:none;max-width:100%;border-radius:12px;border:1px solid var(--line);" />
+          </div>
           <label>
             视频链接（可选）
             <input id="videoUrl" name="videoUrl" type="url" placeholder="支持 mp4 / webm 直链，或可嵌入视频链接">
@@ -261,6 +272,11 @@
     const logoutButton = document.getElementById("logout-button");
     const uploadVideoButton = document.getElementById("upload-video-button");
     const uploadStatus = document.getElementById("upload-status");
+    const uploadCoverButton = document.getElementById("upload-cover-button");
+    const coverUploadStatus = document.getElementById("cover-upload-status");
+    const coverPreview = document.getElementById("cover-preview");
+    const coverImageInput = document.getElementById("coverImage");
+    const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
     let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
@@ -283,6 +299,8 @@
       form.reset();
       formTitle.textContent = "新建项目";
       uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
+      coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
+      showCoverPreview("");
       setMessage(statusText);
     }
 
@@ -403,6 +421,42 @@
       return result.videoUrl;
     }
 
+    function showCoverPreview(url) {
+      if (url) {
+        coverPreview.src = url;
+        coverPreview.style.display = "block";
+      } else {
+        coverPreview.removeAttribute("src");
+        coverPreview.style.display = "none";
+      }
+    }
+
+    async function uploadSelectedImage() {
+      const file = form.coverFile.files[0];
+      if (!file) {
+        throw new Error("请先选择一张本地图片。");
+      }
+
+      coverUploadStatus.textContent = `正在上传：${file.name}`;
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await parseJsonResponse(response);
+      if (!response.ok) {
+        throw new Error(result.message || "图片上传失败。");
+      }
+
+      form.coverImage.value = result.imageUrl;
+      showCoverPreview(result.imageUrl);
+      coverUploadStatus.textContent = "图片上传成功，链接已自动填入。";
+      return result.imageUrl;
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -445,6 +499,17 @@
       }
     });
 
+    uploadCoverButton.addEventListener("click", async () => {
+      try {
+        await uploadSelectedImage();
+      } catch (error) {
+        coverUploadStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
+
+    coverImageInput.addEventListener("input", () => showCoverPreview(coverImageInput.value.trim()));
+
     logoutButton.addEventListener("click", async () => {
       try {
         await authFetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
@@ -469,6 +534,8 @@
           form.coverImage.value = project.coverImage;
           form.videoUrl.value = project.videoUrl || "";
           form.content.value = project.content;
+          showCoverPreview(project.coverImage);
+          coverUploadStatus.textContent = "当前封面已填入。你也可以重新上传本地图片覆盖它。";
           uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
           setMessage(`正在编辑《${project.title}》。`);
           window.scrollTo({ top: 0, behavior: "smooth" });
