@@ -470,6 +470,22 @@ app.get("/healthz", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime(), timestamp: Date.now() });
 });
 
+// 数据库保活端点：做一次极轻量的查询（select 一行），让 Supabase 免费项目
+// 不因闲置（约 7 天）而休眠。用 UptimeRobot 等定时访问此地址，可同时保活
+// 后端（实例被唤醒）和数据库（产生查询活动）。
+app.get("/healthz/db", async (req, res) => {
+  try {
+    const { error } = await supabase.from("projects").select("id").limit(1);
+    if (error) {
+      throw error;
+    }
+    return res.json({ status: "ok", db: "ok", timestamp: Date.now() });
+  } catch (error) {
+    console.error("DB keep-alive failed:", error.message);
+    return res.status(503).json({ status: "error", db: "down", error: error.message });
+  }
+});
+
 app.post("/api/auth/login", loginRateLimit, (req, res) => {
   const username = req.body?.username;
   const password = req.body?.password;
@@ -617,6 +633,7 @@ app.get("/api/projects", async (req, res) => {
 
     return res.json((data || []).map(toListItem));
   } catch (error) {
+    console.error("Failed to read projects:", error.message);
     return res.status(500).json({ message: "Failed to read projects", error: error.message });
   }
 });
@@ -639,6 +656,7 @@ app.get("/api/projects/:id", async (req, res) => {
 
     return res.json(data);
   } catch (error) {
+    console.error("Failed to read project:", error.message);
     return res.status(500).json({ message: "Failed to read project", error: error.message });
   }
 });

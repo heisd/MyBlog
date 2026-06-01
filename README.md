@@ -306,6 +306,23 @@ GET https://<你的后端域名>.onrender.com/healthz
 
 `/healthz` 是专门为此新增的**轻量端点**：只返回 `{ status, uptime, timestamp }`，**不访问数据库**，所以保活 ping 既廉价又不会打扰正常业务。
 
+### 方案一·补充：数据库（Supabase）保活
+
+Supabase **免费项目闲置约 7 天会自动暂停（Paused）**，暂停后所有数据库请求都失败（项目列表加载不出来）。同样可以用定时访问来保活——为此提供了一个会**轻量查询数据库**的端点：
+
+```text
+GET https://<你的后端域名>.onrender.com/healthz/db
+```
+
+它执行一次 `select id from projects limit 1`，产生数据库活动让 Supabase 不进入休眠；成功返回 `{ status:"ok", db:"ok" }`，失败返回 503。
+
+**推荐做法**：把 UptimeRobot 的监控地址直接设成 `/healthz/db`（每 5~10 分钟一次）。这一个地址就能**同时保活后端实例（被唤醒）和数据库（产生查询）**，省去单独再配一个监控。
+
+> ⚠️ 注意：
+> - 若项目**当前已是 Paused 状态**，保活无法自动唤醒它，需先到 [supabase.com](https://supabase.com) 手动点 **Restore** 恢复，之后保活才能防止它再次休眠。
+> - 这是规避免费版限制的实践做法；Supabase 的休眠策略未来可能调整。要彻底免休眠可升级 Supabase Pro。
+> - 也可用 GitHub Actions 定时任务直接查询 Supabase REST API 来保活，效果相同。
+
 ### 方案二：前端重试 + 唤醒提示（已实现）
 
 即便偶尔遇到冷启动，前端也不会直接报错，而是自动重试到服务唤醒。项目归档页与留言页都接入了统一的 `fetchWithWake()`：
