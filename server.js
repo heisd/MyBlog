@@ -126,6 +126,11 @@ function getMailTransporter() {
       port: SMTP_PORT,
       secure: SMTP_SECURE,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // 加超时，避免 SMTP 配错/被拦时 sendMail 默认要卡 2 分钟，
+      // 让请求快速失败并回退到前端的 mailto 兜底。
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
     });
   } catch (error) {
     mailTransporterFailed = true;
