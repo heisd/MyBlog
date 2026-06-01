@@ -114,13 +114,34 @@ ClaudeAboutWeb/
 
 ## 在线留言（联系页）
 
-访客在 `/contact` 页面填写称呼、邮箱（选填）和留言内容后，前端会调用 `POST /api/contact`，后端通过 SMTP 把留言邮件发送到 `CONTACT_TO`（默认 `2284610019@qq.com`）。
+访客在 `/contact` 页面填写称呼、邮箱（选填）和留言内容后，前端会调用 `POST /api/contact`，后端把留言邮件发送到 `CONTACT_TO`（默认 `2284610019@qq.com`）。
 
-- 收件箱：由 `CONTACT_TO` 控制，默认即为 `2284610019@qq.com`
-- 发件依赖 SMTP，需要配置 `SMTP_USER` 和 `SMTP_PASS`（QQ 邮箱使用「授权码」而非登录密码）
-- 接口带有频率限制：同一 IP 每小时最多发送 5 条
-- 若邮箱填写了，邮件会带上 `Reply-To`，方便直接回复
-- 如果服务端尚未配置 SMTP，接口返回 503，前端会自动降级为 `mailto:` 链接，访客仍可一键用邮件联系
+发信方式支持两种，**优先使用 Resend**：
+
+| 方式 | 触发条件 | 说明 |
+| --- | --- | --- |
+| **Resend HTTP API（推荐）** | 配置了 `RESEND_API_KEY` | 走 HTTPS，**绕过 Render 免费版对 SMTP 端口的封锁**，零成本 |
+| SMTP（备选） | 未配 Resend，但配了 `SMTP_USER`/`SMTP_PASS` | Render **免费实例已封禁出站 SMTP 端口**，需付费实例才可用 |
+
+> ⚠️ **重要**：Render 自 2025-09-26 起，免费 Web 服务封禁了出站 SMTP 端口（25/465/587），所以免费实例上 SMTP 一定连接超时。免费方案请用 Resend。
+
+### 用 Resend（免费）
+
+1. 到 [resend.com](https://resend.com) 注册（建议直接用你的收件 QQ 邮箱注册）
+2. 创建一个 **API Key**
+3. 在 Render 后端服务的环境变量里加：
+   ```env
+   RESEND_API_KEY=re_xxxxxxxx
+   RESEND_FROM=MyBlog <onboarding@resend.dev>
+   ```
+4. 重新部署即可。没有自有域名时用默认的 `onboarding@resend.dev` 发信，**只能发到你 Resend 账号的邮箱**——而本场景的收件人正是站长本人，所以够用。若以后要发给任意地址，在 Resend 验证一个自有域名再把 `RESEND_FROM` 换成该域名地址即可。
+
+### 其它行为
+
+- 收件箱：由 `CONTACT_TO` 控制，默认 `2284610019@qq.com`
+- 频率限制：同一 IP 每小时最多发送 5 条（仅统计**成功**发送）
+- 访客填了邮箱时，邮件带 `Reply-To`，方便直接回复
+- 两种方式都没配时接口返回 503，前端自动降级为 `mailto:` 链接，访客仍可一键用邮件联系；发送失败返回 502，同样有 `mailto:` 兜底
 
 ## CORS 跨域配置
 

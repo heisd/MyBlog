@@ -85,6 +85,10 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const CONTACT_FROM = process.env.CONTACT_FROM || SMTP_USER;
 
+// Resend（HTTP 邮件 API，走 HTTPS，绕过 Render 免费版对 SMTP 端口的封锁）。
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_FROM = process.env.RESEND_FROM || "MyBlog <onboarding@resend.dev>";
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -166,6 +170,45 @@ async function getMailTransporter() {
   }
 
   return mailTransporter;
+}
+
+function contactEmailConfigured() {
+  return Boolean(RESEND_API_KEY) || Boolean(SMTP_USER && SMTP_PASS);
+}
+
+async function sendContactViaResend({ subject, text, replyTo }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [CONTACT_TO],
+        subject,
+        text,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        detail = await response.text();
+      } catch {
+        detail = "";
+      }
+      throw new Error(`Resend API ${response.status}: ${detail.slice(0, 300)}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 app.use(
@@ -475,8 +518,7 @@ app.post("/api/contact", contactRateLimit, async (req, res) => {
     return res.status(400).json({ message: "邮箱格式不正确，请检查后重试。" });
   }
 
-  const transporter = await getMailTransporter();
-  if (!transporter) {
+  if (!contactEmailConfigured()) {
     return res.status(503).json({
       message: "在线发送暂未配置，请通过邮箱直接联系。",
       fallbackEmail: CONTACT_TO,
@@ -494,14 +536,26 @@ app.post("/api/contact", contactRateLimit, async (req, res) => {
     message,
   ].join("\n");
 
+  const subject = `博客留言 - 来自 ${name}`;
+  const replyTo = email || undefined;
+
   try {
-    await transporter.sendMail({
-      from: CONTACT_FROM,
-      to: CONTACT_TO,
-      replyTo: email || undefined,
-      subject: `博客留言 - 来自 ${name}`,
-      text: textBody,
-    });
+    // 优先用 Resend（HTTPS），SMTP 仅作为备选（在能用 SMTP 的环境下）。
+    if (RESEND_API_KEY) {
+      await sendContactViaResend({ subject, text: textBody, replyTo });
+    } else {
+      const transporter = await getMailTransporter();
+      if (!transporter) {
+        throw new Error("SMTP transporter unavailable");
+      }
+      await transporter.sendMail({
+        from: CONTACT_FROM,
+        to: CONTACT_TO,
+        replyTo,
+        subject,
+        text: textBody,
+      });
+    }
 
     recordContactSend(req);
     return res.status(201).json({ message: "留言已发送，感谢你的联系！" });
