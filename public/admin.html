@@ -245,6 +245,16 @@
             正文内容（支持 HTML）
             <textarea id="content" name="content" required></textarea>
           </label>
+          <div class="upload-row">
+            <label>
+              正文插图（上传后在光标处插入 &lt;img&gt;）
+              <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*">
+            </label>
+            <div class="upload-actions">
+              <button class="secondary" type="button" id="upload-content-image-button">上传图片插入正文</button>
+              <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择文件后点这里（≤ 8MB）。</span>
+            </div>
+          </div>
           <div class="actions">
             <button class="primary" type="submit">保存项目</button>
             <button class="secondary" type="button" id="reset-button">重置表单</button>
@@ -276,7 +286,10 @@
     const coverUploadStatus = document.getElementById("cover-upload-status");
     const coverPreview = document.getElementById("cover-preview");
     const coverImageInput = document.getElementById("coverImage");
+    const uploadContentImageButton = document.getElementById("upload-content-image-button");
+    const contentImageStatus = document.getElementById("content-image-status");
     const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
+    const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择文件后点这里（≤ 8MB）。";
     let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
@@ -300,6 +313,7 @@
       formTitle.textContent = "新建项目";
       uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
       coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
+      contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
       showCoverPreview("");
       setMessage(statusText);
     }
@@ -457,6 +471,43 @@
       return result.imageUrl;
     }
 
+    function insertIntoContent(snippet) {
+      const textarea = form.content;
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? textarea.value.length;
+      textarea.value = textarea.value.slice(0, start) + snippet + textarea.value.slice(end);
+      const caret = start + snippet.length;
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+    }
+
+    async function uploadContentImage() {
+      const file = form.contentImageFile.files[0];
+      if (!file) {
+        throw new Error("请先选择一张图片。");
+      }
+
+      contentImageStatus.textContent = `正在上传：${file.name}`;
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await authFetch(`${API_BASE}/api/uploads/image`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await parseJsonResponse(response);
+      if (!response.ok) {
+        throw new Error(result.message || "图片上传失败。");
+      }
+
+      const snippet = `\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`;
+      insertIntoContent(snippet);
+      contentImageStatus.textContent = "图片已上传并插入正文。";
+      form.contentImageFile.value = "";
+      return result.imageUrl;
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -509,6 +560,15 @@
     });
 
     coverImageInput.addEventListener("input", () => showCoverPreview(coverImageInput.value.trim()));
+
+    uploadContentImageButton.addEventListener("click", async () => {
+      try {
+        await uploadContentImage();
+      } catch (error) {
+        contentImageStatus.textContent = error.message;
+        setMessage(error.message, true);
+      }
+    });
 
     logoutButton.addEventListener("click", async () => {
       try {
