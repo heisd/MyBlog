@@ -692,17 +692,32 @@
       insertIntoContent(result.html || "");
 
       const filled = [];
-      if (result.title && !form.title.value.trim()) {
-        form.title.value = result.title;
-        filled.push("标题");
+      const skipped = [];
+      if (result.title) {
+        if (!form.title.value.trim()) {
+          form.title.value = result.title;
+          filled.push("标题");
+        } else {
+          skipped.push("标题");
+        }
       }
-      if (result.summary && !form.summary.value.trim()) {
-        form.summary.value = result.summary;
-        filled.push("摘要");
+      if (result.summary) {
+        if (!form.summary.value.trim()) {
+          form.summary.value = result.summary;
+          filled.push("摘要");
+        } else {
+          skipped.push("摘要");
+        }
       }
 
+      const clip = (text) => (text.length > 30 ? `${text.slice(0, 30)}…` : text);
       const headings = (result.outline || []).length;
-      docImportStatus.textContent = `已导入正文${headings ? `（识别 ${headings} 个标题/目录）` : ""}${filled.length ? `，并自动填入${filled.join("、")}` : ""}。请检查后保存。`;
+      const parts = [`已导入正文${headings ? `（识别 ${headings} 个标题/目录）` : ""}`];
+      if (result.title) parts.push(`识别标题「${clip(result.title)}」`);
+      if (result.summary) parts.push(`识别摘要「${clip(result.summary)}」`);
+      if (filled.length) parts.push(`已自动填入${filled.join("、")}`);
+      if (skipped.length) parts.push(`${skipped.join("、")}已有内容（未覆盖）`);
+      docImportStatus.textContent = `${parts.join("；")}。请检查后保存。`;
       form.docFile.value = "";
     }
 

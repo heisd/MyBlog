@@ -289,7 +289,11 @@ CONTACT_FROM=your-account@qq.com
 - 后台现在支持上传本地视频文件，视频会进入 `Supabase Storage`
 - 后台封面图片支持两种方式：粘贴外链，或直接上传本地图片（≤ 8MB，存入 `Supabase Storage` 的 `project-covers` 桶并自动回填链接，带预览）
 - 正文编辑支持「上传图片插入正文」：可一次多选，上传后在光标处依次插入 `<img>` 标签（复用同一图片上传接口）
-- 正文编辑支持「导入文档」：上传 `.md/.markdown/.txt/.docx/.pdf`，后端用 `marked`（Markdown）、`mammoth`（Word）、`pdf-parse`（PDF）解析为正文 HTML，自动提取**目录**（h1–h3 生成带锚点的 TOC）、**摘要**（首段）与**标题**（首个标题），标题/摘要仅在为空时自动填入，文档本身不入库
+- 正文编辑支持「导入文档」：上传 `.md/.markdown/.txt/.docx/.pdf`，后端用 `marked`（Markdown）、`mammoth`（Word）、`pdf-parse`（PDF）解析为正文 HTML，并自动识别**目录/标题/摘要**：
+  - 目录：h1–h3 生成带锚点的 TOC
+  - 标题：优先识别文档显式「标题：/题目：/Title:」，其次首个标题，再退回文件名
+  - 摘要：优先识别显式「摘要：/简介：/Abstract:」（支持值在下一行），其次正文首段
+  - 标题/摘要仅在表单为空时自动填入（不覆盖已填内容），但识别结果会在状态栏展示；文档本身不入库
 
 ## 性能与可用性：冷启动与前端重试
 
