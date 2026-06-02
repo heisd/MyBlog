@@ -148,6 +148,40 @@ ClaudeAboutWeb/
 - 访客填了邮箱时，邮件带 `Reply-To`，方便直接回复
 - 两种方式都没配时接口返回 503，前端自动降级为 `mailto:` 链接，访客仍可一键用邮件联系；发送失败返回 502，同样有 `mailto:` 兜底
 
+## 访客访问门禁（注册 / 登录后才能看项目）
+
+`/welcome` 是访问项目前的门禁页：访客需**注册**（邮箱 + 邮件验证码 + 自设密码）或**登录**（邮箱 + 密码）后，才能浏览项目。**硬门槛**：未登录时 `GET /api/projects`、`GET /api/projects/:id` 返回 401，前端会自动跳转到 `/welcome`（管理员 token 也放行，便于自己浏览）。
+
+### 流程与接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/access/config` | 返回 Turnstile site key（若配置）与内置人机验证的一次性表单令牌 |
+| `POST` | `/api/access/register/request-code` | 注册第一步：人机验证 + 限流后，给邮箱发 6 位验证码 |
+| `POST` | `/api/access/register` | 注册第二步：校验验证码 + 设置密码，创建账号并发放访问令牌 |
+| `POST` | `/api/access/login` | 邮箱 + 密码登录，发放访问令牌 |
+| `GET` | `/api/access/verify` | 校验访问令牌是否有效（`X-Access-Token`） |
+
+访问令牌为 HMAC 签名、含 14 天有效期，存在访客浏览器的 `localStorage`，请求项目时通过 `X-Access-Token` 头携带。密码用 `scrypt` + 随机盐哈希存储在 Supabase `visitors` 表。
+
+### 安全防护（防号池 / 机器人）
+
+- **人机验证**：优先 Cloudflare Turnstile（配 `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`）；未配置时用内置方案——**蜜罐字段** + **签名表单令牌**（含时间陷阱：提交过快判为机器人、一次性防重放）。
+- **限流（防号池刷码）**：发码按 **每 IP**、**每邮箱**、**全局**三层限流 + 60s 重发冷却；登录失败按 **IP/邮箱** 限流。
+- 验证码 10 分钟有效、最多尝试 6 次、HMAC 存储不落明文；密码哈希用 scrypt。
+
+### 前置条件 ⚠️
+
+1. 建表（见 [`data/migration-add-visitors.sql`](data/migration-add-visitors.sql)）：
+   ```sql
+   create table if not exists visitors (
+     email text primary key,
+     password_hash text not null,
+     created_at timestamptz default now()
+   );
+   ```
+2. **邮件能发到任意访客邮箱**：Resend 免费版**没有验证域名时只能发到你自己账号邮箱**，访客收不到验证码。要让任意人能注册，需在 Resend **验证一个自有域名**，并把 `RESEND_FROM` 改为该域名地址。
+
 ## CORS 跨域配置
 
 前端（Vercel）与后端（Render）不同源，后端通过环境变量 `CORS_ORIGIN` 控制允许访问的前端域名。若页面出现 `Not allowed by CORS`，说明当前访问的域名不在白名单里。
@@ -175,6 +209,7 @@ create table projects (
   summary text,
   "coverImage" text,
   "videoUrl" text,
+  "repoUrl" text,
   tags text[] default '{}',
   status text default 'published',
   pinned boolean default false,
@@ -188,6 +223,14 @@ create table projects (
 
 ```sql
 alter table projects add column if not exists "videoUrl" text;
+```
+
+### GitHub 仓库链接（repoUrl）
+
+每个项目可填一个 GitHub 仓库链接：详情页展示「在 GitHub 查看源码」按钮，列表卡片显示 GitHub 小图标。加列（见 [`data/migration-add-repo-url.sql`](data/migration-add-repo-url.sql)，未执行时同样容错忽略）：
+
+```sql
+alter table projects add column if not exists "repoUrl" text;
 ```
 
 ### 标签 / 分类（tags）
