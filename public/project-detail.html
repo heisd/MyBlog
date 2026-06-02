@@ -156,6 +156,7 @@
     .content h1, .content h2, .content h3, .content h4 {
       line-height: 1.3;
       margin: 30px 0 12px;
+      scroll-margin-top: 92px;
     }
     .content h2 { font-size: 1.5rem; }
     .content h3 { font-size: 1.25rem; }
@@ -266,6 +267,61 @@
       font-size: 0.85rem;
       margin-top: 14px;
     }
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      width: 0;
+      background: linear-gradient(90deg, #cc6a2d, #e0883f);
+      box-shadow: 0 0 8px rgba(204, 106, 45, 0.5);
+      z-index: 40;
+      transition: width 90ms linear;
+    }
+    .toc-panel {
+      position: fixed;
+      top: 110px;
+      left: calc(50% + 470px);
+      width: 210px;
+      max-height: 72vh;
+      overflow-y: auto;
+      padding: 16px 14px 16px 16px;
+      background: var(--paper);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .toc-title {
+      font-weight: 700;
+      color: var(--accent-dark);
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .toc-link {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      padding: 5px 8px;
+      border-radius: 8px;
+      border-left: 2px solid transparent;
+      transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+    }
+    .toc-link:hover { color: var(--accent-dark); background: rgba(204, 106, 45, 0.08); }
+    .toc-link.active {
+      color: var(--accent-dark);
+      background: rgba(204, 106, 45, 0.12);
+      border-left-color: var(--accent);
+      font-weight: 700;
+    }
+    .toc-link.lvl-3 { padding-left: 20px; font-size: 0.86rem; }
+    @media (min-width: 1340px) {
+      .toc-panel.show { display: block; }
+    }
     @media (max-width: 600px) {
       .pager { grid-template-columns: 1fr; }
       .pager-link.next { text-align: left; align-items: flex-start; }
@@ -275,13 +331,16 @@
       article { padding: 26px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .back, .tag, .pager-link, .pager-link .dir, body { transition: none; }
+      .back, .tag, .pager-link, .pager-link .dir, .toc-link, body { transition: none; }
       .back:hover, .tag:hover, .pager-link:hover { transform: none; }
       .pager-link.prev:hover .dir, .pager-link.next:hover .dir { transform: none; }
+      .progress-bar { transition: none; }
     }
   </style>
 </head>
 <body>
+  <div class="progress-bar" id="progress-bar"></div>
+  <aside class="toc-panel" id="toc-panel" aria-label="目录"></aside>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">Heisd.Stark</a>
@@ -427,6 +486,7 @@
             <div class="content">${project.content}</div>
           </article>
         `;
+        buildToc();
         setupPager(project.id);
       } catch (error) {
         root.className = "state";
@@ -475,6 +535,71 @@
       const wrap = document.querySelector(".wrap");
       wrap.appendChild(nav);
       wrap.appendChild(hint);
+    }
+
+    // ---- 阅读进度条 + 目录 ----
+    const progressBar = document.getElementById("progress-bar");
+    const tocPanel = document.getElementById("toc-panel");
+    let headings = [];
+    let tocLinks = [];
+
+    function updateOnScroll() {
+      const docH = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = docH > 0 ? window.scrollY / docH : 0;
+      progressBar.style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
+
+      if (headings.length) {
+        let activeId = headings[0].id;
+        for (const heading of headings) {
+          if (heading.getBoundingClientRect().top <= 110) activeId = heading.id;
+          else break;
+        }
+        tocLinks.forEach((link) => link.classList.toggle("active", link.dataset.target === activeId));
+      }
+    }
+
+    let ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        requestAnimationFrame(() => { updateOnScroll(); ticking = false; });
+        ticking = true;
+      }
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+
+    function buildToc() {
+      const content = document.querySelector(".content");
+      if (!content) return;
+      headings = Array.from(content.querySelectorAll("h1, h2, h3")).filter((h) => !h.closest("nav.toc"));
+      if (headings.length < 2) {
+        updateOnScroll();
+        return;
+      }
+      headings.forEach((heading, i) => {
+        if (!heading.id) heading.id = `sec-${i}`;
+      });
+      tocPanel.innerHTML =
+        '<div class="toc-title">目录</div>' +
+        headings
+          .map(
+            (heading) =>
+              `<a class="toc-link${heading.tagName === "H3" ? " lvl-3" : ""}" href="#${heading.id}" data-target="${heading.id}">${escapeHtml(heading.textContent || "")}</a>`
+          )
+          .join("");
+      tocLinks = Array.from(tocPanel.querySelectorAll(".toc-link"));
+      tocPanel.classList.add("show");
+      tocPanel.addEventListener("click", (event) => {
+        const link = event.target.closest("a[data-target]");
+        if (!link) return;
+        event.preventDefault();
+        const target = document.getElementById(link.dataset.target);
+        if (target) {
+          target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+          history.replaceState(null, "", `#${link.dataset.target}`);
+        }
+      });
+      updateOnScroll();
     }
 
     document.addEventListener("keydown", (event) => {
