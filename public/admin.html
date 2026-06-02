@@ -187,30 +187,126 @@
       border-color: var(--accent);
       box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
     }
-    .upload-row > label {
+    .field-label {
+      font-weight: 700;
       font-size: 0.95rem;
     }
-    .upload-row input[type="file"] {
-      font-size: 0.9rem;
-      color: var(--muted);
-      border: 1px solid var(--line);
+    .dropzone {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px;
+      border: 1.5px dashed #c7d2e0;
+      border-radius: 12px;
       background: #fff;
-      padding: 8px 10px;
-    }
-    .upload-row input[type="file"]::file-selector-button {
-      margin-right: 12px;
-      border: none;
-      border-radius: 999px;
-      padding: 9px 16px;
-      background: #e9eef7;
-      color: var(--accent);
-      font-weight: 700;
+      color: var(--muted);
       cursor: pointer;
-      transition: background-color 150ms ease, transform 150ms ease;
+      transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
     }
-    .upload-row input[type="file"]::file-selector-button:hover {
-      background: #d7e0ef;
-      transform: translateY(-1px);
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: #f3f8ff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    }
+    .dropzone input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .dz-icon {
+      font-weight: 900;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .dz-text {
+      font-size: 0.9rem;
+    }
+    .file-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .file-chips:empty {
+      display: none;
+    }
+    .file-chip {
+      position: relative;
+      width: 150px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+    }
+    .file-chip-thumb {
+      height: 84px;
+      background: #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .file-chip-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .file-chip-thumb .ext {
+      font-weight: 800;
+      color: #94a3b8;
+      font-size: 1.3rem;
+      letter-spacing: 0.05em;
+    }
+    .file-chip-body {
+      padding: 8px 10px 10px;
+    }
+    .file-chip-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-chip-badge {
+      display: inline-block;
+      margin-top: 5px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--accent);
+      background: #e9eef7;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .file-chip-remove {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border-radius: 50%;
+      border: none;
+      background: rgba(17, 24, 39, 0.72);
+      color: #fff;
+      font-size: 16px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 150ms ease, background-color 150ms ease;
+    }
+    .file-chip:hover .file-chip-remove,
+    .file-chip:focus-within .file-chip-remove {
+      opacity: 1;
+    }
+    .file-chip-remove:hover {
+      background: var(--danger);
     }
     .upload-actions {
       display: flex;
@@ -272,6 +368,49 @@
     }
     .preview-wrap .preview-remove:hover {
       background: var(--danger);
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 50;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal {
+      background: #fff;
+      border-radius: 18px;
+      max-width: 460px;
+      width: 100%;
+      padding: 22px 22px 18px;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.3);
+    }
+    .modal h3 {
+      margin: 0 0 10px;
+    }
+    .modal .modal-row {
+      margin: 12px 0;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      padding: 10px 12px;
+      background: #f6f8fb;
+      border-radius: 10px;
+    }
+    .modal .modal-detected {
+      color: var(--accent);
+      word-break: break-word;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 16px;
+      flex-wrap: wrap;
     }
     .project-list {
       display: grid;
@@ -354,10 +493,13 @@
             <input id="coverImage" name="coverImage" type="url" required>
           </label>
           <div class="upload-row">
-            <label>
-              本地封面图片（可选，上传后自动填入上方链接）
+            <div class="field-label">本地封面图片（可选，上传后自动填入上方链接）</div>
+            <label class="dropzone">
               <input id="coverFile" name="coverFile" type="file" accept="image/*">
+              <span class="dz-icon">⬆</span>
+              <span class="dz-text">点击选择或拖拽图片到此（≤ 8MB）</span>
             </label>
+            <div class="file-chips" id="coverFile-chips"></div>
             <div class="upload-actions">
               <button class="secondary" type="button" id="upload-cover-button">上传本地图片</button>
               <span id="cover-upload-status" class="upload-status">想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。</span>
@@ -372,10 +514,13 @@
             <input id="videoUrl" name="videoUrl" type="url" placeholder="支持 mp4 / webm 直链，或可嵌入视频链接">
           </label>
           <div class="upload-row">
-            <label>
-              本地视频文件（可选）
+            <div class="field-label">本地视频文件（可选）</div>
+            <label class="dropzone">
               <input id="videoFile" name="videoFile" type="file" accept="video/*">
+              <span class="dz-icon">⬆</span>
+              <span class="dz-text">点击选择或拖拽视频到此</span>
             </label>
+            <div class="file-chips" id="videoFile-chips"></div>
             <div class="upload-actions">
               <button class="secondary" type="button" id="upload-video-button">上传本地视频</button>
               <span id="upload-status" class="upload-status">如果你想直接使用电脑里的视频，请先选择文件再点击上传。</span>
@@ -387,20 +532,26 @@
             <textarea id="content" name="content" required></textarea>
           </label>
           <div class="upload-row">
-            <label>
-              导入文档（.md / .markdown / .txt / .docx / .pdf）
+            <div class="field-label">导入文档（.md / .markdown / .txt / .docx / .pdf）</div>
+            <label class="dropzone">
               <input id="docFile" name="docFile" type="file" accept=".md,.markdown,.txt,.docx,.pdf">
+              <span class="dz-icon">⬆</span>
+              <span class="dz-text">点击选择或拖拽文档到此（≤ 15MB）</span>
             </label>
+            <div class="file-chips" id="docFile-chips"></div>
             <div class="upload-actions">
               <button class="secondary" type="button" id="import-doc-button">导入文档到正文</button>
               <span id="doc-import-status" class="upload-status">上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。</span>
             </div>
           </div>
           <div class="upload-row">
-            <label>
-              正文插图（可多选，上传后在光标处依次插入 &lt;img&gt;）
+            <div class="field-label">正文插图（可多选，上传后在光标处依次插入 &lt;img&gt;）</div>
+            <label class="dropzone">
               <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*" multiple>
+              <span class="dz-icon">⬆</span>
+              <span class="dz-text">点击选择或拖拽图片到此（可多选，每张 ≤ 8MB）</span>
             </label>
+            <div class="file-chips" id="contentImageFile-chips"></div>
             <div class="upload-actions">
               <button class="secondary" type="button" id="upload-content-image-button">上传图片插入正文</button>
               <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。</span>
@@ -421,6 +572,18 @@
       </section>
     </div>
   </main>
+
+  <div class="modal-overlay" id="replace-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="replace-modal-title">
+      <h3 id="replace-modal-title">是否用识别结果替换？</h3>
+      <p>文档中识别到下列内容，而表单对应字段已有内容。你想怎么处理？</p>
+      <div id="replace-modal-body"></div>
+      <div class="modal-actions">
+        <button class="secondary" type="button" id="replace-keep">保留原内容</button>
+        <button class="primary" type="button" id="replace-apply">用识别结果替换</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
@@ -443,6 +606,11 @@
     const contentImageStatus = document.getElementById("content-image-status");
     const importDocButton = document.getElementById("import-doc-button");
     const docImportStatus = document.getElementById("doc-import-status");
+    const replaceModal = document.getElementById("replace-modal");
+    const replaceModalBody = document.getElementById("replace-modal-body");
+    const replaceApply = document.getElementById("replace-apply");
+    const replaceKeep = document.getElementById("replace-keep");
+    const FILE_INPUT_IDS = ["coverFile", "videoFile", "docFile", "contentImageFile"];
     const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
     const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
     const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
@@ -463,6 +631,134 @@
         .replaceAll("'", "&#39;");
     }
 
+    function fileExt(name) {
+      const match = /\.([a-z0-9]+)$/i.exec(name || "");
+      return match ? match[1].toUpperCase() : "FILE";
+    }
+
+    function removeFileAt(input, index) {
+      const dt = new DataTransfer();
+      Array.from(input.files).forEach((file, i) => {
+        if (i !== index) dt.items.add(file);
+      });
+      input.files = dt.files;
+    }
+
+    // 渲染所选文件为 Claude 风格的卡片（缩略图/类型徽章 + 悬停删除）。
+    function renderChips(input) {
+      const chips = document.getElementById(`${input.id}-chips`);
+      if (!chips) return;
+      chips.innerHTML = "";
+      Array.from(input.files || []).forEach((file, index) => {
+        const chip = document.createElement("div");
+        chip.className = "file-chip";
+
+        const thumb = document.createElement("div");
+        thumb.className = "file-chip-thumb";
+        if ((file.type || "").startsWith("image/")) {
+          const img = document.createElement("img");
+          const url = URL.createObjectURL(file);
+          img.src = url;
+          img.onload = () => URL.revokeObjectURL(url);
+          thumb.appendChild(img);
+        } else {
+          const ext = document.createElement("span");
+          ext.className = "ext";
+          ext.textContent = fileExt(file.name);
+          thumb.appendChild(ext);
+        }
+
+        const body = document.createElement("div");
+        body.className = "file-chip-body";
+        const name = document.createElement("div");
+        name.className = "file-chip-name";
+        name.textContent = file.name;
+        name.title = file.name;
+        const badge = document.createElement("span");
+        badge.className = "file-chip-badge";
+        badge.textContent = fileExt(file.name);
+        body.appendChild(name);
+        body.appendChild(badge);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "file-chip-remove";
+        remove.textContent = "×";
+        remove.title = "移除";
+        remove.setAttribute("aria-label", "移除文件");
+        remove.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          removeFileAt(input, index);
+          renderChips(input);
+        });
+
+        chip.appendChild(thumb);
+        chip.appendChild(body);
+        chip.appendChild(remove);
+        chips.appendChild(chip);
+      });
+    }
+
+    function clearFileInput(input) {
+      input.value = "";
+      renderChips(input);
+    }
+
+    function setupDropzone(input) {
+      const zone = input.closest(".dropzone");
+      input.addEventListener("change", () => renderChips(input));
+      if (!zone) return;
+      ["dragenter", "dragover"].forEach((type) =>
+        zone.addEventListener(type, (event) => {
+          event.preventDefault();
+          zone.classList.add("dragover");
+        })
+      );
+      ["dragleave", "drop"].forEach((type) =>
+        zone.addEventListener(type, (event) => {
+          event.preventDefault();
+          zone.classList.remove("dragover");
+        })
+      );
+      zone.addEventListener("drop", (event) => {
+        const dropped = Array.from(event.dataTransfer.files || []);
+        if (!dropped.length) return;
+        const dt = new DataTransfer();
+        if (input.multiple) {
+          Array.from(input.files).forEach((file) => dt.items.add(file));
+          dropped.forEach((file) => dt.items.add(file));
+        } else {
+          dt.items.add(dropped[0]);
+        }
+        input.files = dt.files;
+        renderChips(input);
+      });
+    }
+
+    // 弹窗询问是否用识别结果替换已有的标题/摘要，返回 Promise<boolean>。
+    function askReplace(items) {
+      return new Promise((resolve) => {
+        replaceModalBody.innerHTML = items
+          .map(
+            (item) =>
+              `<div class="modal-row"><b>${escapeHtml(item.label)}</b><br>当前：${escapeHtml(item.current)}<br><span class="modal-detected">识别：${escapeHtml(item.detected)}</span></div>`
+          )
+          .join("");
+        replaceModal.classList.add("open");
+        const finish = (result) => {
+          replaceModal.classList.remove("open");
+          replaceApply.removeEventListener("click", onApply);
+          replaceKeep.removeEventListener("click", onKeep);
+          resolve(result);
+        };
+        const onApply = () => finish(true);
+        const onKeep = () => finish(false);
+        replaceApply.addEventListener("click", onApply);
+        replaceKeep.addEventListener("click", onKeep);
+      });
+    }
+
     function resetForm(statusText = "已进入后台，可以开始管理项目。") {
       editingId = null;
       form.reset();
@@ -472,6 +768,10 @@
       contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
       docImportStatus.textContent = DEFAULT_DOC_STATUS;
       showCoverPreview("");
+      FILE_INPUT_IDS.forEach((id) => {
+        const input = document.getElementById(id);
+        if (input) renderChips(input);
+      });
       setMessage(statusText);
     }
 
@@ -589,6 +889,7 @@
 
       form.videoUrl.value = result.videoUrl;
       uploadStatus.textContent = "视频上传成功，链接已自动填入。";
+      clearFileInput(form.videoFile);
       return result.videoUrl;
     }
 
@@ -625,6 +926,7 @@
       form.coverImage.value = result.imageUrl;
       showCoverPreview(result.imageUrl);
       coverUploadStatus.textContent = "图片上传成功，链接已自动填入。";
+      clearFileInput(form.coverFile);
       return result.imageUrl;
     }
 
@@ -666,7 +968,7 @@
       }
 
       contentImageStatus.textContent = `已上传并插入 ${done} 张图片。`;
-      form.contentImageFile.value = "";
+      clearFileInput(form.contentImageFile);
     }
 
     async function importDocument() {
@@ -692,21 +994,21 @@
       insertIntoContent(result.html || "");
 
       const filled = [];
-      const skipped = [];
+      const conflicts = [];
       if (result.title) {
         if (!form.title.value.trim()) {
           form.title.value = result.title;
           filled.push("标题");
-        } else {
-          skipped.push("标题");
+        } else if (form.title.value.trim() !== result.title) {
+          conflicts.push({ label: "标题", field: "title", detected: result.title, current: form.title.value.trim() });
         }
       }
       if (result.summary) {
         if (!form.summary.value.trim()) {
           form.summary.value = result.summary;
           filled.push("摘要");
-        } else {
-          skipped.push("摘要");
+        } else if (form.summary.value.trim() !== result.summary) {
+          conflicts.push({ label: "摘要", field: "summary", detected: result.summary, current: form.summary.value.trim() });
         }
       }
 
@@ -716,9 +1018,18 @@
       if (result.title) parts.push(`识别标题「${clip(result.title)}」`);
       if (result.summary) parts.push(`识别摘要「${clip(result.summary)}」`);
       if (filled.length) parts.push(`已自动填入${filled.join("、")}`);
-      if (skipped.length) parts.push(`${skipped.join("、")}已有内容（未覆盖）`);
       docImportStatus.textContent = `${parts.join("；")}。请检查后保存。`;
-      form.docFile.value = "";
+      clearFileInput(form.docFile);
+
+      if (conflicts.length) {
+        const replace = await askReplace(conflicts);
+        if (replace) {
+          conflicts.forEach((item) => { form[item.field].value = item.detected; });
+          docImportStatus.textContent += " 已用识别结果替换。";
+        } else {
+          docImportStatus.textContent += ` ${conflicts.map((item) => item.label).join("、")}保留原内容。`;
+        }
+      }
     }
 
     form.addEventListener("submit", async (event) => {
@@ -853,6 +1164,11 @@
           setMessage(error.message, true);
         }
       }
+    });
+
+    FILE_INPUT_IDS.forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) setupDropzone(input);
     });
 
     verifySession().then((ok) => {
