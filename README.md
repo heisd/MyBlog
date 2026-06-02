@@ -173,6 +173,15 @@ ClaudeAboutWeb/
 - **限流（防号池刷码）**：发码按 **每 IP**、**每邮箱**、**全局**三层限流 + 60s 重发冷却；登录失败按 **IP/邮箱** 限流。
 - 验证码 10 分钟有效、最多尝试 6 次、HMAC 存储不落明文；密码哈希用 scrypt。
 
+### 会员（订阅制）与 AI 助手
+
+- **会员**：访客账号带 `member_until`（到期时间），在未来即为有效会员；**按月订阅**。后台「会员管理」面板可对每个用户「+1 个月」（授予/续费）或「取消会员」。
+- **会员特权**：
+  - 查看项目的**私有 GitHub 仓库链接**（非会员看到「🔒 仅会员可见」；后端会把 `repoUrl` 置空，不泄露）。
+  - 使用**悬浮 AI 助手**（右下角 🤖）：`POST /api/assistant/chat`，仅会员/管理员可用，代理到 OpenAI 兼容接口（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`，支持 OpenAI / DeepSeek / Kimi / 智谱 等），带每账号每小时限流。
+- 后台接口：`GET /api/admin/visitors`（列出用户）、`PATCH /api/admin/visitors/:email`（`{extendMonths}` 续费 / `{revoke:true}` 取消）。
+- 真正的在线支付（Stripe 等）未集成；当前由管理员手动授予/续费会员（相当于人工订阅管理）。
+
 ### 前置条件 ⚠️
 
 1. 建表（见 [`data/migration-add-visitors.sql`](data/migration-add-visitors.sql)）：
@@ -180,6 +189,7 @@ ClaudeAboutWeb/
    create table if not exists visitors (
      email text primary key,
      password_hash text not null,
+     member_until timestamptz,
      created_at timestamptz default now()
    );
    ```

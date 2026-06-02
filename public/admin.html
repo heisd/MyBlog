@@ -749,6 +749,14 @@
         </div>
       </section>
     </div>
+
+    <section class="panel" style="margin-top:22px;">
+      <h2>会员管理</h2>
+      <p class="hint">会员（订阅制 · 按月）可查看项目的私有 GitHub 链接、使用 AI 助手。点「+1 个月」授予或续费，点「取消会员」立即取消。</p>
+      <div id="visitor-list" class="project-list">
+        <div class="project-card"><p>正在加载…</p></div>
+      </div>
+    </section>
   </main>
 
   <div class="modal-overlay" id="replace-modal">
@@ -1527,10 +1535,70 @@
       tagSuggest.appendChild(button);
     });
 
+    const visitorList = document.getElementById("visitor-list");
+
+    function fmtDate(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("zh-CN");
+    }
+
+    async function loadVisitors() {
+      try {
+        const response = await authFetch(`${API_BASE}/api/admin/visitors`);
+        if (!response.ok) throw new Error("加载会员失败。");
+        const list = await parseJsonResponse(response);
+        if (!list.length) {
+          visitorList.innerHTML = "<div class='project-card'><p>还没有注册用户。</p></div>";
+          return;
+        }
+        visitorList.innerHTML = list
+          .map(
+            (v) => `
+          <article class="project-card${v.member ? " pinned" : ""}">
+            <div class="meta-row">
+              <span>${escapeHtml(v.email)}</span>
+              <span class="badge ${v.member ? "badge-pub" : "badge-draft"}">${v.member ? "会员" : "普通"}</span>
+            </div>
+            <p>注册：${fmtDate(v.createdAt)}${v.memberUntil ? ` · 会员到期：${fmtDate(v.memberUntil)}` : ""}</p>
+            <div class="card-actions">
+              <button class="secondary" data-vaction="extend" data-email="${escapeHtml(v.email)}">+1 个月</button>
+              ${v.member ? `<button class="danger" data-vaction="revoke" data-email="${escapeHtml(v.email)}">取消会员</button>` : ""}
+            </div>
+          </article>`
+          )
+          .join("");
+      } catch (error) {
+        visitorList.innerHTML = `<div class='project-card'><p>${escapeHtml(error.message)}</p></div>`;
+      }
+    }
+
+    visitorList.addEventListener("click", async (event) => {
+      const btn = event.target.closest("button[data-vaction]");
+      if (!btn) return;
+      const email = btn.dataset.email;
+      const action = btn.dataset.vaction;
+      const body = action === "revoke" ? { revoke: true } : { extendMonths: 1 };
+      try {
+        const response = await authFetch(`${API_BASE}/api/admin/visitors/${encodeURIComponent(email)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const result = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(result.message || "操作失败。");
+        setMessage(action === "revoke" ? "已取消会员。" : "已授予 / 续费 1 个月会员。");
+        await loadVisitors();
+      } catch (error) {
+        setMessage(error.message, true);
+      }
+    });
+
     verifySession().then((ok) => {
       if (!ok) return;
       resetForm();
       loadAdminProjects();
+      loadVisitors();
     });
 
     (function () {

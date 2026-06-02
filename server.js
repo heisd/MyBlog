@@ -102,6 +102,11 @@ const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const BREVO_SENDER = process.env.BREVO_SENDER || CONTACT_TO;
 const BREVO_SENDER_NAME = process.env.BREVO_SENDER_NAME || "Heisd.Stark";
 
+// AI 助手（会员专享）：OpenAI 兼容的 Chat Completions 接口（OpenAI/DeepSeek/Kimi 等均可）。
+const LLM_API_KEY = process.env.LLM_API_KEY;
+const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -472,6 +477,7 @@ const codeReqByIp = new Map();
 const codeReqByEmail = new Map();
 const loginByKey = new Map();
 const usedFormTokens = new Map();
+const assistantByEmail = new Map();
 let globalCodeWindow = { start: Date.now(), count: 0 };
 
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -566,6 +572,44 @@ async function visitorExists(email) {
   return Boolean(data);
 }
 
+// 会员判定（订阅制）：member_until 在未来则为有效会员（列未迁移时按非会员处理）。
+async function getMemberInfo(email) {
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("member_until")
+      .eq("email", email)
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) return { member: false, memberUntil: null };
+      throw error;
+    }
+    const raw = data && data.member_until ? data.member_until : null;
+    const active = raw ? new Date(raw).getTime() > Date.now() : false;
+    return { member: active, memberUntil: raw };
+  } catch (error) {
+    console.error("getMemberInfo failed:", error.message);
+    return { member: false, memberUntil: null };
+  }
+}
+
+async function visitorIsMember(email) {
+  return (await getMemberInfo(email)).member;
+}
+
+// 该请求能否看到私有仓库链接：管理员可见，或访客为会员。
+async function canSeeRepo(req) {
+  if (req.adminSession) return true;
+  if (req.visitor) return await visitorIsMember(req.visitor.email);
+  return false;
+}
+
+// 对外项目对象按是否会员决定 repoUrl 可见性。
+function gateRepo(item, allowed) {
+  if (allowed) return { ...item, repoLocked: false };
+  return { ...item, repoUrl: null, repoLocked: Boolean(item.repoUrl) };
+}
+
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 10;
 const loginAttempts = new Map();
@@ -650,6 +694,7 @@ function toListItem(project) {
     coverImage: project.coverImage,
     videoUrl: project.videoUrl,
     repoUrl: project.repoUrl || null,
+    repoLocked: false,
     tags: Array.isArray(project.tags) ? project.tags : [],
     status: project.status === "draft" ? "draft" : "published",
     pinned: Boolean(project.pinned),
@@ -1164,10 +1209,11 @@ app.get("/api/access/config", (req, res) => {
   return res.json(config);
 });
 
-app.get("/api/access/verify", (req, res) => {
+app.get("/api/access/verify", async (req, res) => {
   const visitor = verifyVisitorToken((req.get("x-access-token") || "").trim());
   if (!visitor) return res.status(401).json({ authenticated: false });
-  return res.json({ authenticated: true, email: visitor.email });
+  const info = await getMemberInfo(visitor.email);
+  return res.json({ authenticated: true, email: visitor.email, member: info.member, memberUntil: info.memberUntil });
 });
 
 app.post("/api/access/register/request-code", async (req, res) => {
@@ -1313,6 +1359,132 @@ app.post("/api/access/login", async (req, res) => {
   return res.json({ token: createVisitorToken(email), email });
 });
 
+// 后台：会员管理（列出访客、授予/续费/取消会员）
+app.get("/api/admin/visitors", requireAdmin, async (req, res) => {
+  try {
+    let { data, error } = await supabase
+      .from("visitors")
+      .select("email, member_until, created_at")
+      .order("created_at", { ascending: false });
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("visitors")
+        .select("email, created_at")
+        .order("created_at", { ascending: false }));
+    }
+    if (error) throw error;
+    const now = Date.now();
+    return res.json(
+      (data || []).map((v) => ({
+        email: v.email,
+        createdAt: v.created_at,
+        memberUntil: v.member_until || null,
+        member: v.member_until ? new Date(v.member_until).getTime() > now : false,
+      }))
+    );
+  } catch (error) {
+    console.error("List visitors failed:", error.message);
+    return res.status(500).json({ message: "加载会员失败。", error: error.message });
+  }
+});
+
+app.patch("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
+  const email = normalizeEmail(req.params.email);
+  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱不正确。" });
+
+  let memberUntil;
+  if (req.body?.revoke) {
+    memberUntil = null;
+  } else {
+    const months = Math.max(1, Math.min(24, Number(req.body?.extendMonths) || 1));
+    let base = Date.now();
+    try {
+      const { data } = await supabase.from("visitors").select("member_until").eq("email", email).maybeSingle();
+      if (data && data.member_until && new Date(data.member_until).getTime() > base) {
+        base = new Date(data.member_until).getTime();
+      }
+    } catch {}
+    memberUntil = new Date(base + months * 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .update({ member_until: memberUntil })
+      .eq("email", email)
+      .select("email, member_until")
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ message: "用户不存在。" });
+    return res.json({
+      email: data.email,
+      memberUntil: data.member_until,
+      member: data.member_until ? new Date(data.member_until).getTime() > Date.now() : false,
+    });
+  } catch (error) {
+    console.error("Update visitor failed:", error.message);
+    return res.status(500).json({ message: "操作失败。", error: error.message });
+  }
+});
+
+// AI 助手（会员专享）：代理到 OpenAI 兼容接口
+app.post("/api/assistant/chat", requireVisitor, async (req, res) => {
+  const allowed = req.adminSession ? true : req.visitor ? await visitorIsMember(req.visitor.email) : false;
+  if (!allowed) {
+    return res.status(403).json({ message: "AI 助手为会员专享功能。", code: "MEMBER_ONLY" });
+  }
+  if (!LLM_API_KEY) {
+    return res.status(503).json({ message: "AI 助手尚未配置。" });
+  }
+
+  const key = req.visitor ? req.visitor.email : "admin";
+  if (!hitWindow(assistantByEmail, key, 60 * 60 * 1000, 40)) {
+    return res.status(429).json({ message: "提问有点频繁，请稍后再聊。" });
+  }
+
+  const incoming = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  const safe = incoming
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .slice(-12)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+  if (!safe.length || safe[safe.length - 1].role !== "user") {
+    return res.status(400).json({ message: "消息为空。" });
+  }
+
+  const system = {
+    role: "system",
+    content:
+      "你是 Heisd.Stark 个人博客的 AI 助手，主要帮助会员了解站点上的机器人控制、计算机视觉与 AI 项目，并解答相关技术问题。回答简洁、友好、使用中文。",
+  };
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    const resp = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LLM_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: LLM_MODEL, messages: [system, ...safe], temperature: 0.5, max_tokens: 800 }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+    if (!resp.ok) {
+      let detail = "";
+      try { detail = await resp.text(); } catch {}
+      throw new Error(`LLM ${resp.status}: ${detail.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    const reply = data?.choices?.[0]?.message?.content || "（暂时没有返回内容）";
+    return res.json({ reply });
+  } catch (error) {
+    console.error("Assistant failed:", error.message);
+    return res.status(502).json({ message: "AI 助手暂时不可用，请稍后再试。" });
+  }
+});
+
 // 公开列表：仅返回已发布项目，置顶优先，再按日期倒序。
 app.get("/api/projects", requireVisitor, async (req, res) => {
   try {
@@ -1337,7 +1509,8 @@ app.get("/api/projects", requireVisitor, async (req, res) => {
       throw error;
     }
 
-    return res.json((data || []).map(toListItem));
+    const allowed = await canSeeRepo(req);
+    return res.json((data || []).map(toListItem).map((item) => gateRepo(item, allowed)));
   } catch (error) {
     console.error("Failed to read projects:", error.message);
     return res.status(500).json({ message: "Failed to read projects", error: error.message });
@@ -1389,7 +1562,8 @@ app.get("/api/projects/:id", requireVisitor, async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    return res.json(data);
+    const allowed = await canSeeRepo(req);
+    return res.json(gateRepo(data, allowed));
   } catch (error) {
     console.error("Failed to read project:", error.message);
     return res.status(500).json({ message: "Failed to read project", error: error.message });

@@ -370,7 +370,14 @@
         const res = await fetch(`${API_BASE}/api/access/verify`, { headers: { "X-Access-Token": token } });
         if (!res.ok) { localStorage.removeItem(TOKEN_KEY); return; }
         const data = await res.json();
-        document.getElementById("who").textContent = `已登录：${data.email}`;
+        let who = `已登录：${data.email}`;
+        if (data.member) {
+          const until = data.memberUntil ? new Date(data.memberUntil).toLocaleDateString("zh-CN") : "";
+          who += `　·　会员${until ? `（${until} 到期）` : ""}`;
+        } else {
+          who += "　·　普通用户（会员可看私有仓库 + AI 助手）";
+        }
+        document.getElementById("who").textContent = who;
         gate.hidden = true;
         entered.hidden = false;
       } catch {}
