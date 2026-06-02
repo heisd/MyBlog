@@ -175,6 +175,7 @@ create table projects (
   summary text,
   "coverImage" text,
   "videoUrl" text,
+  "repoUrl" text,
   tags text[] default '{}',
   status text default 'published',
   pinned boolean default false,
@@ -188,6 +189,14 @@ create table projects (
 
 ```sql
 alter table projects add column if not exists "videoUrl" text;
+```
+
+### GitHub 仓库链接（repoUrl）
+
+每个项目可填一个 GitHub 仓库链接：详情页展示「在 GitHub 查看源码」按钮，列表卡片显示 GitHub 小图标。加列（见 [`data/migration-add-repo-url.sql`](data/migration-add-repo-url.sql)，未执行时同样容错忽略）：
+
+```sql
+alter table projects add column if not exists "repoUrl" text;
 ```
 
 ### 标签 / 分类（tags）

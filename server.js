@@ -415,6 +415,7 @@ function toListItem(project) {
     summary: project.summary,
     coverImage: project.coverImage,
     videoUrl: project.videoUrl,
+    repoUrl: project.repoUrl || null,
     tags: Array.isArray(project.tags) ? project.tags : [],
     status: project.status === "draft" ? "draft" : "published",
     pinned: Boolean(project.pinned),
@@ -452,7 +453,7 @@ function normalizeTags(value) {
 function isMissingColumn(error) {
   if (!error) return false;
   if (error.code === "42703" || error.code === "PGRST204") return true;
-  return /(tags|status|pinned)/i.test(`${error.message || ""} ${error.details || ""}`);
+  return /(tags|status|pinned|repourl)/i.test(`${error.message || ""} ${error.details || ""}`);
 }
 
 function normalizeStatus(value) {
@@ -939,7 +940,7 @@ app.get("/api/projects", async (req, res) => {
   try {
     let { data, error } = await supabase
       .from("projects")
-      .select("id, title, date, summary, coverImage, videoUrl, tags, status, pinned")
+      .select("id, title, date, summary, coverImage, videoUrl, repoUrl, tags, status, pinned")
       .neq("status", "draft")
       .order("pinned", { ascending: false, nullsFirst: false })
       .order("date", { ascending: false, nullsFirst: false })
@@ -970,7 +971,7 @@ app.get("/api/admin/projects", requireAdmin, async (req, res) => {
   try {
     let { data, error } = await supabase
       .from("projects")
-      .select("id, title, date, summary, coverImage, videoUrl, tags, status, pinned")
+      .select("id, title, date, summary, coverImage, videoUrl, repoUrl, tags, status, pinned")
       .order("pinned", { ascending: false, nullsFirst: false })
       .order("date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
@@ -1036,6 +1037,7 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      repoUrl: String(req.body.repoUrl || "").trim() || null,
       tags: normalizeTags(req.body.tags),
       status: normalizeStatus(req.body.status),
       pinned: Boolean(req.body.pinned),
@@ -1047,9 +1049,9 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       .select("*")
       .single();
 
-    // 尚未执行 tags/status/pinned 迁移时，去掉这些新字段再保存（项目仍可创建）。
+    // 尚未执行 tags/status/pinned/repoUrl 迁移时，去掉这些新字段再保存（项目仍可创建）。
     if (error && isMissingColumn(error)) {
-      const { tags, status, pinned, ...base } = project;
+      const { tags, status, pinned, repoUrl, ...base } = project;
       ({ data, error } = await supabase.from("projects").insert(base).select("*").single());
     }
 
@@ -1094,6 +1096,7 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      repoUrl: String(req.body.repoUrl || "").trim() || null,
       tags: normalizeTags(req.body.tags),
       status: normalizeStatus(req.body.status),
       pinned: Boolean(req.body.pinned),
@@ -1109,7 +1112,7 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       .single();
 
     if (error && isMissingColumn(error)) {
-      const { tags, status, pinned, ...base } = updatedProject;
+      const { tags, status, pinned, repoUrl, ...base } = updatedProject;
       ({ data, error } = await supabase
         .from("projects")
         .update(base)
