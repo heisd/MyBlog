@@ -33,6 +33,15 @@
       font-weight: 700;
       text-decoration: none;
       margin-bottom: 20px;
+      transition: color 160ms ease, transform 160ms ease;
+    }
+    .back:hover {
+      color: var(--accent-dark);
+      transform: translateX(-4px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .back { transition: color 160ms ease; }
+      .back:hover { transform: none; }
     }
     .cover {
       width: 100%;

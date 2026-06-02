@@ -71,18 +71,83 @@
       background: white;
     }
     button {
+      position: relative;
+      overflow: hidden;
       border: none;
       border-radius: 999px;
       padding: 13px 18px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
-      background: var(--accent);
+      background: linear-gradient(120deg, #cc6a2d, #e0883f, #8e4317, #cc6a2d);
+      background-size: 300% 100%;
       color: white;
       margin-top: 8px;
+      animation: btn-flow 6s ease infinite;
+      transition: transform 200ms ease, box-shadow 200ms ease, filter 200ms ease;
+      will-change: transform;
+    }
+    button::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -130%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+      transform: skewX(-20deg);
+      transition: left 600ms ease;
+      pointer-events: none;
     }
     button:hover {
-      background: var(--accent-dark);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 16px 32px rgba(204, 106, 45, 0.4);
+      animation-duration: 2.2s;
+    }
+    button:hover::after {
+      left: 140%;
+    }
+    button:active {
+      transform: translateY(0) scale(0.97);
+      box-shadow: 0 5px 12px rgba(31, 31, 31, 0.14);
+    }
+    button:focus-visible {
+      outline: 3px solid rgba(204, 106, 45, 0.45);
+      outline-offset: 3px;
+    }
+    @keyframes btn-flow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      transform: scale(0);
+      background: rgba(255, 255, 255, 0.5);
+      animation: ripple-anim 600ms linear;
+      pointer-events: none;
+    }
+    @keyframes ripple-anim {
+      to { transform: scale(4); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button,
+      button::after {
+        transition: background-color 200ms ease;
+      }
+      button {
+        animation: none;
+      }
+      button:hover {
+        transform: none;
+      }
+      button:hover::after {
+        left: -130%;
+      }
+      .ripple {
+        display: none;
+      }
     }
     .message {
       min-height: 22px;
@@ -186,6 +251,23 @@
     });
 
     verifyExistingSession();
+
+    (function () {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      document.addEventListener("click", function (event) {
+        const target = event.target.closest("button");
+        if (!target) return;
+        const rect = target.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const ripple = document.createElement("span");
+        ripple.className = "ripple";
+        ripple.style.width = ripple.style.height = `${size}px`;
+        ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
+        ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
+        target.appendChild(ripple);
+        ripple.addEventListener("animationend", function () { ripple.remove(); });
+      });
+    })();
   </script>
 </body>
 </html>
