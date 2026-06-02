@@ -89,7 +89,7 @@ ClaudeAboutWeb/
 
 - `/`：博客首页
 - `/welcome`：项目欢迎页（点击"项目归档/浏览项目"先进入此过渡页，再进入项目列表）
-- `/projects`：项目列表页
+- `/projects`：项目列表页（瀑布流卡片 + 关键词搜索 + 按关键词自动分类的标签筛选）
 - `/project/:id`：项目详情页
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
@@ -175,6 +175,9 @@ create table projects (
   summary text,
   "coverImage" text,
   "videoUrl" text,
+  tags text[] default '{}',
+  status text default 'published',
+  pinned boolean default false,
   content text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
@@ -186,6 +189,31 @@ create table projects (
 ```sql
 alter table projects add column if not exists "videoUrl" text;
 ```
+
+### 标签 / 分类（tags）
+
+后台支持给每个项目打**标签**，项目归档页据此做**真实分类筛选**（没有标签的旧项目自动回退到关键词分类）。启用需要给表加 `tags` 列（见 [`data/migration-add-tags.sql`](data/migration-add-tags.sql)）：
+
+```sql
+alter table projects add column if not exists tags text[] default '{}';
+```
+
+> 后端做了**容错**：未执行该迁移时，项目仍可正常读取/创建/编辑（仅暂时忽略标签，列表回退到关键词自动分类）。执行迁移后，后台填写的标签即生效。
+
+### 草稿状态 / 置顶（status & pinned）
+
+后台支持把项目存为**草稿**（不在前台显示）和**置顶**（前台优先展示）。需要给表加两列（见 [`data/migration-add-status-pinned.sql`](data/migration-add-status-pinned.sql)）：
+
+```sql
+alter table projects add column if not exists status text default 'published';
+alter table projects add column if not exists pinned boolean default false;
+```
+
+- 公开接口 `GET /api/projects` 只返回**已发布**项目，且**置顶优先**、再按日期倒序
+- 后台接口 `GET /api/admin/projects`（需登录）返回**全部**（含草稿）
+- `PATCH /api/projects/:id`（需登录）用于在后台列表快速切换置顶/草稿，无需重传全文
+- 后台列表可按**状态/标签**筛选并显示徽章；项目页可切换**最新/最早**排序，置顶项目带「★ 置顶」标记
+- 同样**容错**：未执行迁移时不影响现有功能（仅忽略草稿/置顶；快捷开关会提示先执行迁移）
 
 ## 本地运行
 

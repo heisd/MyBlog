@@ -3,100 +3,142 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>项目详情</title>
+  <title>项目详情 | Heisd.Stark</title>
   <style>
     :root {
-      --bg: #f5f7fb;
-      --paper: #ffffff;
-      --ink: #1f2328;
-      --muted: #606a75;
-      --line: #e2e8f0;
-      --accent: #185adb;
+      --bg: #f4efe7;
+      --paper: rgba(255, 253, 247, 0.94);
+      --card: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6b625b;
+      --accent: #cc6a2d;
+      --accent-dark: #8e4317;
+      --line: #e5dbcf;
+      --shadow: 0 22px 50px rgba(68, 48, 30, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      font-family: Georgia, "Times New Roman", serif;
       color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      min-height: 100vh;
     }
-    .wrap {
-      max-width: 980px;
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(248, 244, 237, 0.78);
+      border-bottom: 1px solid rgba(229, 219, 207, 0.9);
+    }
+    .topbar-inner {
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 32px 24px 60px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 700;
+      color: var(--accent-dark);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.95rem;
+    }
+    .nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    .nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.96rem;
+      font-weight: 700;
+    }
+    .nav a:hover { color: var(--accent-dark); }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 36px 24px 70px;
     }
     .back {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: var(--accent);
+      color: var(--accent-dark);
       font-weight: 700;
       text-decoration: none;
-      margin-bottom: 20px;
+      margin-bottom: 22px;
       transition: color 160ms ease, transform 160ms ease;
     }
-    .back:hover {
-      color: var(--accent-dark);
-      transform: translateX(-4px);
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .back { transition: color 160ms ease; }
-      .back:hover { transform: none; }
-    }
+    .back:hover { color: var(--accent); transform: translateX(-4px); }
     .cover {
       width: 100%;
       height: min(46vw, 420px);
       object-fit: cover;
       border-radius: 26px;
       border: 1px solid var(--line);
-      box-shadow: 0 20px 44px rgba(15, 23, 42, 0.08);
+      box-shadow: var(--shadow);
       margin-bottom: 28px;
     }
     article {
       background: var(--paper);
-      border: 1px solid var(--line);
+      border: 1px solid rgba(229, 219, 207, 0.96);
       border-radius: 26px;
-      padding: 36px;
-      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.05);
+      padding: 40px;
+      box-shadow: var(--shadow);
     }
     .meta {
       color: var(--muted);
-      font-size: 0.95rem;
-      margin-bottom: 10px;
+      font-size: 0.9rem;
+      letter-spacing: 0.04em;
+      margin-bottom: 12px;
     }
     h1 {
-      margin: 0 0 18px;
+      margin: 0 0 16px;
       font-size: clamp(2rem, 5vw, 3.2rem);
       line-height: 1.08;
     }
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(204,106,45,0.14);
+      color: var(--accent-dark);
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background-color 150ms ease, transform 150ms ease;
+    }
+    .tag:hover { background: rgba(204,106,45,0.24); transform: translateY(-1px); }
     .summary {
-      font-size: 1.08rem;
-      line-height: 1.8;
+      font-size: 1.1rem;
+      line-height: 1.85;
       color: var(--muted);
-      border-left: 4px solid #dbeafe;
+      border-left: 4px solid var(--accent);
       padding-left: 18px;
-      margin-bottom: 30px;
-    }
-    .content {
-      line-height: 1.9;
-      color: #313944;
-    }
-    .content h3 {
-      margin-top: 28px;
-      margin-bottom: 10px;
-      font-size: 1.25rem;
+      margin-bottom: 32px;
     }
     .video-panel {
-      margin-bottom: 28px;
-      background: #f8fafc;
+      margin-bottom: 30px;
+      background: rgba(255, 255, 255, 0.6);
       border: 1px solid var(--line);
       border-radius: 20px;
       padding: 20px;
     }
-    .video-panel h2 {
-      margin: 0 0 14px;
-      font-size: 1.2rem;
-    }
+    .video-panel h2 { margin: 0 0 14px; font-size: 1.2rem; }
     .video-frame,
     .video-player {
       width: 100%;
@@ -106,21 +148,282 @@
       background: #000;
       aspect-ratio: 16 / 9;
     }
-    .state {
-      background: white;
-      border: 1px dashed var(--line);
-      border-radius: 18px;
-      padding: 24px;
+    .content {
+      line-height: 1.95;
+      color: #2c2722;
+      font-size: 1.05rem;
+    }
+    .content h1, .content h2, .content h3, .content h4 {
+      line-height: 1.3;
+      margin: 30px 0 12px;
+      scroll-margin-top: 92px;
+    }
+    .content h2 { font-size: 1.5rem; }
+    .content h3 { font-size: 1.25rem; }
+    .content p { margin: 0 0 16px; }
+    .content a { color: var(--accent-dark); }
+    .content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      margin: 12px 0;
+    }
+    .content ul, .content ol { padding-left: 22px; line-height: 1.85; }
+    .content blockquote {
+      margin: 16px 0;
+      padding: 8px 18px;
+      border-left: 4px solid var(--line);
       color: var(--muted);
     }
-    @media (max-width: 640px) {
-      article {
-        padding: 24px;
+    .content pre {
+      background: #2b2722;
+      color: #f4efe7;
+      padding: 16px;
+      border-radius: 12px;
+      overflow: auto;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.92rem;
+    }
+    .content code {
+      background: rgba(204,106,45,0.1);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.92em;
+    }
+    .content pre code { background: none; padding: 0; }
+    .content table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    .content th, .content td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+    .content nav.toc {
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin: 0 0 24px;
+    }
+    .content nav.toc strong { color: var(--accent-dark); display: block; margin-bottom: 8px; }
+    .content nav.toc ul { list-style: none; padding-left: 0; }
+    .content nav.toc a { color: var(--muted); text-decoration: none; }
+    .content nav.toc a:hover { color: var(--accent-dark); }
+    .state {
+      background: var(--paper);
+      border: 1px dashed var(--line);
+      border-radius: 20px;
+      padding: 28px;
+      color: var(--muted);
+      line-height: 1.8;
+      text-align: center;
+    }
+    body { transition: opacity 400ms ease; }
+    body.leaving { opacity: 0; }
+    .pager {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 28px;
+    }
+    .pager-link {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 20px 24px;
+      background: var(--card);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 20px;
+      text-decoration: none;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+    }
+    .pager-link.next { text-align: right; align-items: flex-end; }
+    .pager-link:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+      box-shadow: 0 28px 52px rgba(68, 48, 30, 0.16);
+    }
+    .pager-link .dir {
+      color: var(--accent-dark);
+      font-weight: 700;
+      font-size: 0.88rem;
+      letter-spacing: 0.02em;
+      transition: transform 200ms ease;
+    }
+    .pager-link.prev:hover .dir { transform: translateX(-5px); }
+    .pager-link.next:hover .dir { transform: translateX(5px); }
+    .pager-link .ptitle {
+      font-size: 1.12rem;
+      font-weight: 700;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .pager-empty { display: none; }
+    .pager-hint {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 14px;
+    }
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      width: 0;
+      background: linear-gradient(90deg, #cc6a2d, #e0883f);
+      box-shadow: 0 0 8px rgba(204, 106, 45, 0.5);
+      z-index: 40;
+      transition: width 90ms linear;
+    }
+    .toc-panel {
+      position: fixed;
+      top: 110px;
+      left: calc(50% + 470px);
+      width: 210px;
+      max-height: 72vh;
+      overflow-y: auto;
+      padding: 16px 14px 16px 16px;
+      background: var(--paper);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .toc-title {
+      font-weight: 700;
+      color: var(--accent-dark);
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .toc-link {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      padding: 5px 8px;
+      border-radius: 8px;
+      border-left: 2px solid transparent;
+      transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+    }
+    .toc-link:hover { color: var(--accent-dark); background: rgba(204, 106, 45, 0.08); }
+    .toc-link.active {
+      color: var(--accent-dark);
+      background: rgba(204, 106, 45, 0.12);
+      border-left-color: var(--accent);
+      font-weight: 700;
+    }
+    .toc-link.lvl-3 { padding-left: 20px; font-size: 0.86rem; }
+    .toc-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 45;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 26px rgba(204, 106, 45, 0.45);
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    .toc-fab:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(204, 106, 45, 0.5); }
+    .toc-fab:active { transform: translateY(0) scale(0.97); }
+    .toc-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.42);
+      z-index: 44;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 250ms ease;
+    }
+    .toc-backdrop.open { opacity: 1; pointer-events: auto; }
+    .toc-close { display: none; }
+    @media (min-width: 1340px) {
+      .toc-panel.show { display: block; }
+    }
+    @media (max-width: 1339px) {
+      .toc-panel.show {
+        display: block;
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: auto;
+        width: min(84vw, 320px);
+        height: 100%;
+        max-height: 100%;
+        border-radius: 18px 0 0 18px;
+        padding-top: 54px;
+        transform: translateX(106%);
+        transition: transform 280ms ease;
+        z-index: 46;
       }
+      .toc-panel.show.open { transform: translateX(0); }
+      .toc-fab.show { display: inline-flex; }
+      .toc-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(17, 24, 39, 0.08);
+        color: var(--ink);
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+      }
+    }
+    @media (max-width: 600px) {
+      .pager { grid-template-columns: 1fr; }
+      .pager-link.next { text-align: left; align-items: flex-start; }
+      .pager-empty { display: none; }
+    }
+    @media (max-width: 640px) {
+      article { padding: 26px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .back, .tag, .pager-link, .pager-link .dir, .toc-link, body { transition: none; }
+      .back:hover, .tag:hover, .pager-link:hover { transform: none; }
+      .pager-link.prev:hover .dir, .pager-link.next:hover .dir { transform: none; }
+      .progress-bar, .toc-backdrop, .toc-fab { transition: none; }
+      .toc-panel.show { transition: none; }
     }
   </style>
 </head>
 <body>
+  <div class="progress-bar" id="progress-bar"></div>
+  <aside class="toc-panel" id="toc-panel" aria-label="目录"></aside>
+  <button class="toc-fab" id="toc-fab" type="button" aria-label="打开目录">☰ 目录</button>
+  <div class="toc-backdrop" id="toc-backdrop"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/projects">项目归档</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
+      </nav>
+    </div>
+  </header>
+
   <main class="wrap">
     <a class="back" href="/projects">← 返回项目列表</a>
     <div id="project-root" class="state">正在加载项目...</div>
@@ -128,12 +431,24 @@
 
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let prevUrl = null;
+    let nextUrl = null;
+
+    function leaveTo(url) {
+      if (!url) return;
+      if (reduceMotion) {
+        window.location.href = url;
+        return;
+      }
+      document.body.classList.add("leaving");
+      setTimeout(() => { window.location.href = url; }, 400);
+    }
 
     function getProjectId() {
       const params = new URLSearchParams(window.location.search);
       const queryId = params.get("id");
       if (queryId) return queryId;
-
       const parts = window.location.pathname.split("/").filter(Boolean);
       return parts[parts.length - 1];
     }
@@ -143,36 +458,70 @@
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function delay(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    const RETRY_DELAYS = [1500, 2500, 4000, 6000, 8000, 10000];
+    const COLD_START_STATUSES = new Set([502, 503, 504]);
+
+    async function fetchWithWake(url, { retries = 6, onWaking } = {}) {
+      let lastError;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await fetch(url);
+          const raw = await response.text();
+          let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+          const looksColdStart = COLD_START_STATUSES.has(response.status) && data === null;
+          if (looksColdStart && attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          return { ok: response.ok, status: response.status, data };
+        } catch (error) {
+          lastError = error;
+          if (attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          throw lastError;
+        }
+      }
+    }
+
+    function renderTags(tags) {
+      const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
+      if (!list.length) return "";
+      return `<div class="tags">${list
+        .map((tag) => `<a class="tag" href="/projects?tag=${encodeURIComponent(tag)}">${escapeHtml(tag)}</a>`)
+        .join("")}</div>`;
     }
 
     function renderVideo(videoUrl) {
       if (!videoUrl) return "";
-
       const safeUrl = escapeHtml(videoUrl);
       const isDirectVideo = /\.(mp4|webm|ogg)(\?.*)?$/i.test(videoUrl);
-
       if (isDirectVideo) {
         return `
           <section class="video-panel">
             <h2>项目演示视频</h2>
             <video class="video-player" controls playsinline src="${safeUrl}"></video>
-          </section>
-        `;
+          </section>`;
       }
-
       return `
         <section class="video-panel">
           <h2>项目演示视频</h2>
-          <iframe
-            class="video-frame"
-            src="${safeUrl}"
-            title="项目演示视频"
+          <iframe class="video-frame" src="${safeUrl}" title="项目演示视频"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen>
-          </iframe>
-        </section>
-      `;
+            allowfullscreen></iframe>
+        </section>`;
     }
 
     async function loadProject() {
@@ -180,33 +529,181 @@
       const id = getProjectId();
 
       try {
-        const response = await fetch(`${API_BASE}/api/projects/${id}`);
-        if (!response.ok) {
-          throw new Error(response.status === 404 ? "项目不存在。" : "加载项目失败。");
+        const result = await fetchWithWake(`${API_BASE}/api/projects/${encodeURIComponent(id)}`, {
+          onWaking: (n) => {
+            root.className = "state";
+            root.textContent = `服务器正在唤醒，请稍候…（第 ${n} 次重试）`;
+          },
+        });
+
+        if (!result.ok) {
+          throw new Error(result.status === 404 ? "项目不存在。" : "加载项目失败。");
         }
-        let project;
-        try {
-          project = await response.json();
-        } catch {
+        const project = result.data;
+        if (!project || typeof project !== "object") {
           throw new Error("服务器返回异常，请稍后重试。");
         }
 
         root.className = "";
         root.innerHTML = `
-          <img class="cover" src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}">
+          <img class="cover" src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}"
+               referrerpolicy="no-referrer" onerror="this.style.display='none'">
           ${renderVideo(project.videoUrl)}
           <article>
             <div class="meta">${escapeHtml(project.date || "未设置日期")}</div>
             <h1>${escapeHtml(project.title)}</h1>
+            ${renderTags(project.tags)}
             <div class="summary">${escapeHtml(project.summary)}</div>
             <div class="content">${project.content}</div>
           </article>
         `;
+        buildToc();
+        setupPager(project.id);
       } catch (error) {
         root.className = "state";
         root.textContent = error.message;
       }
     }
+
+    // 基于公开列表（已发布、置顶优先、按日期）渲染上一篇/下一篇。
+    async function setupPager(currentId) {
+      let list;
+      try {
+        const result = await fetchWithWake(`${API_BASE}/api/projects`);
+        if (!result.ok || !Array.isArray(result.data)) return;
+        list = result.data;
+      } catch {
+        return;
+      }
+
+      const index = list.findIndex((p) => p.id === currentId);
+      if (index === -1 || list.length < 2) return;
+
+      const prev = list[index - 1] || null;
+      const next = list[index + 1] || null;
+      prevUrl = prev ? `/project/${encodeURIComponent(prev.id)}` : null;
+      nextUrl = next ? `/project/${encodeURIComponent(next.id)}` : null;
+
+      const cell = (proj, cls, dir) =>
+        proj
+          ? `<a class="pager-link ${cls}" href="/project/${encodeURIComponent(proj.id)}"><span class="dir">${dir}</span><span class="ptitle">${escapeHtml(proj.title)}</span></a>`
+          : `<span class="pager-empty"></span>`;
+
+      const nav = document.createElement("nav");
+      nav.className = "pager";
+      nav.innerHTML = cell(prev, "prev", "← 上一篇") + cell(next, "next", "下一篇 →");
+      nav.querySelectorAll(".pager-link").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          leaveTo(link.getAttribute("href"));
+        });
+      });
+
+      const hint = document.createElement("p");
+      hint.className = "pager-hint";
+      hint.textContent = "提示：也可以用键盘 ← / → 翻页";
+
+      const wrap = document.querySelector(".wrap");
+      wrap.appendChild(nav);
+      wrap.appendChild(hint);
+    }
+
+    // ---- 阅读进度条 + 目录 ----
+    const progressBar = document.getElementById("progress-bar");
+    const tocPanel = document.getElementById("toc-panel");
+    const tocFab = document.getElementById("toc-fab");
+    const tocBackdrop = document.getElementById("toc-backdrop");
+    let headings = [];
+    let tocLinks = [];
+
+    function openDrawer() {
+      tocPanel.classList.add("open");
+      tocBackdrop.classList.add("open");
+    }
+    function closeDrawer() {
+      tocPanel.classList.remove("open");
+      tocBackdrop.classList.remove("open");
+    }
+    tocFab.addEventListener("click", openDrawer);
+    tocBackdrop.addEventListener("click", closeDrawer);
+
+    function updateOnScroll() {
+      const docH = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = docH > 0 ? window.scrollY / docH : 0;
+      progressBar.style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
+
+      if (headings.length) {
+        let activeId = headings[0].id;
+        for (const heading of headings) {
+          if (heading.getBoundingClientRect().top <= 110) activeId = heading.id;
+          else break;
+        }
+        tocLinks.forEach((link) => link.classList.toggle("active", link.dataset.target === activeId));
+      }
+    }
+
+    let ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        requestAnimationFrame(() => { updateOnScroll(); ticking = false; });
+        ticking = true;
+      }
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+
+    function buildToc() {
+      const content = document.querySelector(".content");
+      if (!content) return;
+      headings = Array.from(content.querySelectorAll("h1, h2, h3")).filter((h) => !h.closest("nav.toc"));
+      if (headings.length < 2) {
+        updateOnScroll();
+        return;
+      }
+      headings.forEach((heading, i) => {
+        if (!heading.id) heading.id = `sec-${i}`;
+      });
+      tocPanel.innerHTML =
+        '<button class="toc-close" type="button" aria-label="关闭目录">×</button>' +
+        '<div class="toc-title">目录</div>' +
+        headings
+          .map(
+            (heading) =>
+              `<a class="toc-link${heading.tagName === "H3" ? " lvl-3" : ""}" href="#${heading.id}" data-target="${heading.id}">${escapeHtml(heading.textContent || "")}</a>`
+          )
+          .join("");
+      tocLinks = Array.from(tocPanel.querySelectorAll(".toc-link"));
+      tocPanel.classList.add("show");
+      tocFab.classList.add("show");
+      tocPanel.addEventListener("click", (event) => {
+        if (event.target.closest(".toc-close")) {
+          closeDrawer();
+          return;
+        }
+        const link = event.target.closest("a[data-target]");
+        if (!link) return;
+        event.preventDefault();
+        const target = document.getElementById(link.dataset.target);
+        if (target) {
+          target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+          history.replaceState(null, "", `#${link.dataset.target}`);
+        }
+        closeDrawer();
+      });
+      updateOnScroll();
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeDrawer();
+      if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.key === "ArrowLeft" && prevUrl) leaveTo(prevUrl);
+      if (event.key === "ArrowRight" && nextUrl) leaveTo(nextUrl);
+    });
+
+    document.querySelector(".back").addEventListener("click", (event) => {
+      event.preventDefault();
+      leaveTo(event.currentTarget.getAttribute("href"));
+    });
 
     loadProject();
   </script>

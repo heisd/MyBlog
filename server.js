@@ -415,12 +415,48 @@ function toListItem(project) {
     summary: project.summary,
     coverImage: project.coverImage,
     videoUrl: project.videoUrl,
+    tags: Array.isArray(project.tags) ? project.tags : [],
+    status: project.status === "draft" ? "draft" : "published",
+    pinned: Boolean(project.pinned),
   };
 }
 
 function validateProjectInput(body) {
   const requiredFields = ["title", "summary", "content", "coverImage"];
   return requiredFields.filter((field) => !String(body[field] || "").trim());
+}
+
+// 标签归一化：支持数组或「逗号/顿号/中文逗号」分隔的字符串；去重、去空、限长。
+function normalizeTags(value) {
+  let list = [];
+  if (Array.isArray(value)) {
+    list = value;
+  } else if (typeof value === "string") {
+    list = value.split(/[,，、]/);
+  }
+  const seen = new Set();
+  const result = [];
+  for (const item of list) {
+    const tag = String(item).trim().slice(0, 24);
+    if (tag && !seen.has(tag)) {
+      seen.add(tag);
+      result.push(tag);
+    }
+    if (result.length >= 12) break;
+  }
+  return result;
+}
+
+// 数据库还没加 tags/status/pinned 列时的容错判断（兼容未执行迁移的情况）。
+// 42703 = undefined_column（select）；PGRST204 = 列不在 schema cache（insert/update）。
+function isMissingColumn(error) {
+  if (!error) return false;
+  if (error.code === "42703" || error.code === "PGRST204") return true;
+  return /(tags|status|pinned)/i.test(`${error.message || ""} ${error.details || ""}`);
+}
+
+function normalizeStatus(value) {
+  return value === "draft" ? "draft" : "published";
 }
 
 async function ensureUniqueProjectId(title) {
@@ -898,13 +934,25 @@ app.post("/api/uploads/document", requireAdmin, documentUpload.single("document"
   }
 });
 
+// 公开列表：仅返回已发布项目，置顶优先，再按日期倒序。
 app.get("/api/projects", async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
-      .select("id, title, date, summary, coverImage, videoUrl")
+      .select("id, title, date, summary, coverImage, videoUrl, tags, status, pinned")
+      .neq("status", "draft")
+      .order("pinned", { ascending: false, nullsFirst: false })
       .order("date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
+
+    // 若数据库尚未执行 tags/status/pinned 迁移，回退到基础查询，避免列表整体报错。
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("projects")
+        .select("id, title, date, summary, coverImage, videoUrl")
+        .order("date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }));
+    }
 
     if (error) {
       throw error;
@@ -913,6 +961,35 @@ app.get("/api/projects", async (req, res) => {
     return res.json((data || []).map(toListItem));
   } catch (error) {
     console.error("Failed to read projects:", error.message);
+    return res.status(500).json({ message: "Failed to read projects", error: error.message });
+  }
+});
+
+// 后台列表（需登录）：返回全部项目（含草稿），置顶优先，再按日期倒序。
+app.get("/api/admin/projects", requireAdmin, async (req, res) => {
+  try {
+    let { data, error } = await supabase
+      .from("projects")
+      .select("id, title, date, summary, coverImage, videoUrl, tags, status, pinned")
+      .order("pinned", { ascending: false, nullsFirst: false })
+      .order("date", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
+
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("projects")
+        .select("id, title, date, summary, coverImage, videoUrl")
+        .order("date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }));
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json((data || []).map(toListItem));
+  } catch (error) {
+    console.error("Failed to read admin projects:", error.message);
     return res.status(500).json({ message: "Failed to read projects", error: error.message });
   }
 });
@@ -959,13 +1036,22 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      tags: normalizeTags(req.body.tags),
+      status: normalizeStatus(req.body.status),
+      pinned: Boolean(req.body.pinned),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
       .insert(project)
       .select("*")
       .single();
+
+    // 尚未执行 tags/status/pinned 迁移时，去掉这些新字段再保存（项目仍可创建）。
+    if (error && isMissingColumn(error)) {
+      const { tags, status, pinned, ...base } = project;
+      ({ data, error } = await supabase.from("projects").insert(base).select("*").single());
+    }
 
     if (error) {
       throw error;
@@ -1008,19 +1094,72 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      tags: normalizeTags(req.body.tags),
+      status: normalizeStatus(req.body.status),
+      pinned: Boolean(req.body.pinned),
       date: req.body.date ? normalizeDate(req.body.date) : existing.date,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
       .update(updatedProject)
       .eq("id", req.params.id)
       .select("*")
       .single();
 
+    if (error && isMissingColumn(error)) {
+      const { tags, status, pinned, ...base } = updatedProject;
+      ({ data, error } = await supabase
+        .from("projects")
+        .update(base)
+        .eq("id", req.params.id)
+        .select("*")
+        .single());
+    }
+
     if (error) {
       throw error;
+    }
+
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update project", error: error.message });
+  }
+});
+
+// 轻量更新置顶/草稿状态（不需要重传全文），供后台列表的快捷开关使用。
+app.patch("/api/projects/:id", requireAdmin, async (req, res) => {
+  try {
+    const patch = { updated_at: new Date().toISOString() };
+    if (typeof req.body.pinned === "boolean") {
+      patch.pinned = req.body.pinned;
+    }
+    if (req.body.status === "draft" || req.body.status === "published") {
+      patch.status = req.body.status;
+    }
+    if (Object.keys(patch).length <= 1) {
+      return res.status(400).json({ message: "没有可更新的状态字段（pinned / status）。" });
+    }
+
+    const { data, error } = await supabase
+      .from("projects")
+      .update(patch)
+      .eq("id", req.params.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      if (isMissingColumn(error)) {
+        return res
+          .status(409)
+          .json({ message: "请先在 Supabase 执行 status / pinned 迁移后再使用置顶/草稿功能。" });
+      }
+      throw error;
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: "Project not found" });
     }
 
     return res.json(data);

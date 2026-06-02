@@ -174,6 +174,78 @@
       font-size: 0.92rem;
       line-height: 1.6;
     }
+    .tag-input {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fbfdff;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .tag-input:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.14);
+    }
+    .tag-chips { display: contents; }
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #e7f0ea;
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 5px 6px 5px 12px;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .tag-pill button {
+      background: none;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-size: 1.05rem;
+      line-height: 1;
+      padding: 0 4px;
+      border-radius: 50%;
+    }
+    .tag-input input {
+      flex: 1;
+      min-width: 150px;
+      border: none;
+      outline: none;
+      background: transparent;
+      padding: 4px;
+      font: inherit;
+    }
+    .tag-suggest {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: -4px;
+      align-items: center;
+    }
+    .tag-suggest .label {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .tag-suggest button {
+      background: #fff;
+      border: 1px dashed var(--line);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .tag-suggest button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
     .upload-row {
       display: grid;
       gap: 12px;
@@ -456,6 +528,90 @@
       padding: 10px 14px;
       border-radius: 10px;
     }
+    .project-card {
+      animation: pcard-in 360ms ease backwards;
+      transition: box-shadow 180ms ease, border-color 180ms ease;
+    }
+    @keyframes pcard-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .project-card.pinned {
+      border-color: rgba(22, 101, 52, 0.5);
+      box-shadow: inset 4px 0 0 var(--accent), 0 18px 36px rgba(15, 23, 42, 0.05);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .badge-pin { background: #fde9d3; color: #b45309; }
+    .badge-draft { background: #e2e8f0; color: #475569; }
+    .badge-pub { background: #dcfce7; color: #166534; }
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ctag {
+      display: inline-flex;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .form-flags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfdff;
+    }
+    .flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+    .flag input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    .flag .flag-hint { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+    .admin-filters {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .afilter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .afilter .label { color: var(--muted); font-size: 0.85rem; }
+    .afilter button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: transform 150ms ease, border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+    }
+    .afilter button:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+    .afilter button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     @media (max-width: 860px) {
       .grid {
         grid-template-columns: 1fr;
@@ -488,6 +644,16 @@
             摘要
             <textarea id="summary" name="summary" required></textarea>
           </label>
+          <label>
+            标签（用于分类筛选，可填多个）
+            <div class="tag-input" id="tag-input">
+              <span class="tag-chips" id="tag-chips"></span>
+              <input id="tagField" type="text" placeholder="输入标签后按回车或逗号添加" autocomplete="off">
+            </div>
+          </label>
+          <div class="tag-suggest" id="tag-suggest">
+            <span class="label">快速添加：</span>
+          </div>
           <label>
             封面图片链接（可粘贴外链，或用下方上传本地图片）
             <input id="coverImage" name="coverImage" type="url" required>
@@ -557,6 +723,10 @@
               <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。</span>
             </div>
           </div>
+          <div class="form-flags">
+            <label class="flag"><input type="checkbox" id="isDraft"> 存为草稿 <span class="flag-hint">（不在前台显示）</span></label>
+            <label class="flag"><input type="checkbox" id="isPinned"> 置顶 <span class="flag-hint">（前台优先展示）</span></label>
+          </div>
           <div class="actions">
             <button class="primary" type="submit">保存项目</button>
             <button class="secondary" type="button" id="reset-button">重置表单</button>
@@ -566,6 +736,10 @@
 
       <section class="panel">
         <h2>现有项目</h2>
+        <div class="admin-filters" id="admin-filters" style="display:none;">
+          <div class="afilter" id="status-filter"><span class="label">状态</span></div>
+          <div class="afilter" id="tag-filter"><span class="label">标签</span></div>
+        </div>
         <div id="project-list" class="project-list">
           <div class="project-card"><p>正在加载项目...</p></div>
         </div>
@@ -611,6 +785,19 @@
     const replaceApply = document.getElementById("replace-apply");
     const replaceKeep = document.getElementById("replace-keep");
     const FILE_INPUT_IDS = ["coverFile", "videoFile", "docFile", "contentImageFile"];
+    const tagField = document.getElementById("tagField");
+    const tagChips = document.getElementById("tag-chips");
+    const tagSuggest = document.getElementById("tag-suggest");
+    const TAG_SUGGESTIONS = ["视觉", "语音", "AI", "机器人", "嵌入式"];
+    const isDraftInput = document.getElementById("isDraft");
+    const isPinnedInput = document.getElementById("isPinned");
+    const adminFilters = document.getElementById("admin-filters");
+    const statusFilter = document.getElementById("status-filter");
+    const tagFilter = document.getElementById("tag-filter");
+    let currentTags = [];
+    let allAdminProjects = [];
+    let adminFilterStatus = "全部";
+    let adminFilterTag = "全部";
     const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
     const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
     const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
@@ -629,6 +816,47 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+    }
+
+    function renderTags() {
+      tagChips.innerHTML = currentTags
+        .map(
+          (tag) =>
+            `<span class="tag-pill">${escapeHtml(tag)}<button type="button" data-tag="${escapeHtml(tag)}" aria-label="移除标签">×</button></span>`
+        )
+        .join("");
+    }
+
+    function setTags(tags) {
+      const seen = new Set();
+      currentTags = [];
+      (Array.isArray(tags) ? tags : []).forEach((value) => {
+        const tag = String(value).trim().slice(0, 24);
+        if (tag && !seen.has(tag)) {
+          seen.add(tag);
+          currentTags.push(tag);
+        }
+      });
+      renderTags();
+    }
+
+    function addTag(value) {
+      const tag = String(value || "").trim().slice(0, 24);
+      if (!tag || currentTags.length >= 12 || currentTags.includes(tag)) return;
+      currentTags.push(tag);
+      renderTags();
+    }
+
+    function removeTag(tag) {
+      currentTags = currentTags.filter((item) => item !== tag);
+      renderTags();
+    }
+
+    function flushPendingTag() {
+      if (tagField.value.trim()) {
+        addTag(tagField.value);
+        tagField.value = "";
+      }
     }
 
     function fileExt(name) {
@@ -768,6 +996,10 @@
       contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
       docImportStatus.textContent = DEFAULT_DOC_STATUS;
       showCoverPreview("");
+      setTags([]);
+      tagField.value = "";
+      isDraftInput.checked = false;
+      isPinnedInput.checked = false;
       FILE_INPUT_IDS.forEach((id) => {
         const input = document.getElementById(id);
         if (input) renderChips(input);
@@ -823,14 +1055,6 @@
       }
     }
 
-    async function fetchProjects() {
-      const response = await authFetch(`${API_BASE}/api/projects`);
-      if (!response.ok) {
-        throw new Error("加载项目失败。");
-      }
-      return parseJsonResponse(response);
-    }
-
     async function fetchProject(id) {
       const response = await authFetch(`${API_BASE}/api/projects/${id}`);
       if (!response.ok) {
@@ -839,31 +1063,85 @@
       return parseJsonResponse(response);
     }
 
-    async function renderProjects() {
+    async function loadAdminProjects() {
       try {
-        const projects = await fetchProjects();
-        if (!projects.length) {
-          projectList.innerHTML = "<div class='project-card'><p>还没有项目。</p></div>";
-          return;
+        const response = await authFetch(`${API_BASE}/api/admin/projects`);
+        if (!response.ok) {
+          throw new Error("加载项目失败。");
         }
+        allAdminProjects = await parseJsonResponse(response);
+        buildAdminFilters();
+        adminFilters.style.display = allAdminProjects.length ? "flex" : "none";
+        renderProjects();
+      } catch (error) {
+        projectList.innerHTML = `<div class="project-card"><p>${escapeHtml(error.message)}</p></div>`;
+      }
+    }
 
-        projectList.innerHTML = projects.map((project) => `
-          <article class="project-card">
+    function buildAdminFilters() {
+      const statuses = [
+        { key: "全部", label: "全部" },
+        { key: "published", label: "已发布" },
+        { key: "draft", label: "草稿" },
+      ];
+      statusFilter.innerHTML =
+        '<span class="label">状态</span>' +
+        statuses
+          .map(
+            (s) =>
+              `<button type="button" data-status="${s.key}" class="${s.key === adminFilterStatus ? "active" : ""}">${s.label}</button>`
+          )
+          .join("");
+
+      const tagSet = new Set();
+      allAdminProjects.forEach((p) => (p.tags || []).forEach((t) => tagSet.add(t)));
+      const tags = ["全部", ...Array.from(tagSet).sort((a, b) => a.localeCompare(b, "zh"))];
+      tagFilter.innerHTML =
+        '<span class="label">标签</span>' +
+        tags
+          .map(
+            (t) =>
+              `<button type="button" data-tag="${escapeHtml(t)}" class="${t === adminFilterTag ? "active" : ""}">${escapeHtml(t)}</button>`
+          )
+          .join("");
+    }
+
+    function renderProjects() {
+      const filtered = allAdminProjects.filter((p) => {
+        const okStatus = adminFilterStatus === "全部" || (p.status || "published") === adminFilterStatus;
+        const okTag = adminFilterTag === "全部" || (p.tags || []).includes(adminFilterTag);
+        return okStatus && okTag;
+      });
+
+      if (!filtered.length) {
+        projectList.innerHTML = "<div class='project-card'><p>没有匹配的项目。</p></div>";
+        return;
+      }
+
+      projectList.innerHTML = filtered
+        .map((project) => {
+          const isDraftP = (project.status || "published") === "draft";
+          const tags = Array.isArray(project.tags) ? project.tags : [];
+          return `
+          <article class="project-card${project.pinned ? " pinned" : ""}">
             <div class="meta-row">
               <span>${escapeHtml(project.date || "未设置日期")}</span>
+              ${project.pinned ? '<span class="badge badge-pin">置顶</span>' : ""}
+              <span class="badge ${isDraftP ? "badge-draft" : "badge-pub"}">${isDraftP ? "草稿" : "已发布"}</span>
               <span class="meta-pill">${project.videoUrl ? "含视频" : "无视频"}</span>
             </div>
             <h3>${escapeHtml(project.title)}</h3>
             <p>${escapeHtml(project.summary)}</p>
+            ${tags.length ? `<div class="card-tags">${tags.map((t) => `<span class="ctag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
             <div class="card-actions">
+              <button class="secondary" data-action="pin" data-id="${escapeHtml(project.id)}">${project.pinned ? "取消置顶" : "置顶"}</button>
+              <button class="secondary" data-action="status" data-id="${escapeHtml(project.id)}">${isDraftP ? "发布" : "转草稿"}</button>
               <button class="secondary" data-action="edit" data-id="${escapeHtml(project.id)}">编辑</button>
               <button class="danger" data-action="delete" data-id="${escapeHtml(project.id)}">删除</button>
             </div>
-          </article>
-        `).join("");
-      } catch (error) {
-        projectList.innerHTML = `<div class="project-card"><p>${error.message}</p></div>`;
-      }
+          </article>`;
+        })
+        .join("");
     }
 
     async function uploadSelectedVideo() {
@@ -1034,13 +1312,17 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      flushPendingTag();
 
       const payload = {
         title: form.title.value.trim(),
         summary: form.summary.value.trim(),
         coverImage: form.coverImage.value.trim(),
         videoUrl: form.videoUrl.value.trim(),
-        content: form.content.value.trim()
+        content: form.content.value.trim(),
+        tags: currentTags,
+        status: isDraftInput.checked ? "draft" : "published",
+        pinned: isPinnedInput.checked
       };
 
       const method = editingId ? "PUT" : "POST";
@@ -1058,10 +1340,26 @@
         }
 
         resetForm(editingId ? "项目已更新。" : "项目已创建。");
-        await renderProjects();
+        await loadAdminProjects();
       } catch (error) {
         setMessage(error.message, true);
       }
+    });
+
+    statusFilter.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-status]");
+      if (!btn) return;
+      adminFilterStatus = btn.dataset.status;
+      buildAdminFilters();
+      renderProjects();
+    });
+
+    tagFilter.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-tag]");
+      if (!btn) return;
+      adminFilterTag = btn.dataset.tag;
+      buildAdminFilters();
+      renderProjects();
     });
 
     resetButton.addEventListener("click", () => resetForm());
@@ -1135,11 +1433,42 @@
           form.coverImage.value = project.coverImage;
           form.videoUrl.value = project.videoUrl || "";
           form.content.value = project.content;
+          setTags(project.tags || []);
+          isDraftInput.checked = (project.status || "published") === "draft";
+          isPinnedInput.checked = Boolean(project.pinned);
           showCoverPreview(project.coverImage);
           coverUploadStatus.textContent = "当前封面已填入。你也可以重新上传本地图片覆盖它。";
           uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
           setMessage(`正在编辑《${project.title}》。`);
           window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (error) {
+          setMessage(error.message, true);
+        }
+      }
+
+      if (action === "pin" || action === "status") {
+        const project = allAdminProjects.find((p) => p.id === id);
+        if (!project) return;
+        const body =
+          action === "pin"
+            ? { pinned: !project.pinned }
+            : { status: (project.status || "published") === "draft" ? "published" : "draft" };
+        try {
+          const response = await authFetch(`${API_BASE}/api/projects/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          const result = await parseJsonResponse(response);
+          if (!response.ok) {
+            throw new Error(result.message || "操作失败。");
+          }
+          setMessage(
+            action === "pin"
+              ? (body.pinned ? "已置顶。" : "已取消置顶。")
+              : (body.status === "draft" ? "已转为草稿。" : "已发布。")
+          );
+          await loadAdminProjects();
         } catch (error) {
           setMessage(error.message, true);
         }
@@ -1159,7 +1488,7 @@
             resetForm();
           }
           setMessage("项目已删除。");
-          await renderProjects();
+          await loadAdminProjects();
         } catch (error) {
           setMessage(error.message, true);
         }
@@ -1171,10 +1500,31 @@
       if (input) setupDropzone(input);
     });
 
+    tagField.addEventListener("keydown", (event) => {
+      if (["Enter", ",", "，", "、"].includes(event.key)) {
+        event.preventDefault();
+        flushPendingTag();
+      } else if (event.key === "Backspace" && !tagField.value && currentTags.length) {
+        removeTag(currentTags[currentTags.length - 1]);
+      }
+    });
+    tagField.addEventListener("blur", flushPendingTag);
+    tagChips.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-tag]");
+      if (btn) removeTag(btn.dataset.tag);
+    });
+    TAG_SUGGESTIONS.forEach((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `+ ${suggestion}`;
+      button.addEventListener("click", () => addTag(suggestion));
+      tagSuggest.appendChild(button);
+    });
+
     verifySession().then((ok) => {
       if (!ok) return;
       resetForm();
-      renderProjects();
+      loadAdminProjects();
     });
 
     (function () {
