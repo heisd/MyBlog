@@ -176,22 +176,102 @@
     }
     .upload-row {
       display: grid;
-      gap: 10px;
-      padding: 14px;
-      border: 1px dashed var(--line);
-      border-radius: 14px;
-      background: #f8fafc;
+      gap: 12px;
+      padding: 18px;
+      border: 1.5px dashed #c7d2e0;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fbfdff, #f4f7fb);
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+    .upload-row:hover {
+      border-color: var(--accent);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+    }
+    .upload-row > label {
+      font-size: 0.95rem;
+    }
+    .upload-row input[type="file"] {
+      font-size: 0.9rem;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 8px 10px;
+    }
+    .upload-row input[type="file"]::file-selector-button {
+      margin-right: 12px;
+      border: none;
+      border-radius: 999px;
+      padding: 9px 16px;
+      background: #e9eef7;
+      color: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+      transition: background-color 150ms ease, transform 150ms ease;
+    }
+    .upload-row input[type="file"]::file-selector-button:hover {
+      background: #d7e0ef;
+      transform: translateY(-1px);
     }
     .upload-actions {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
       align-items: center;
+    }
+    .upload-row button:not(.preview-remove) {
+      background: #fff;
+      color: var(--accent);
+      border: 1.5px solid var(--accent);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .upload-row button:not(.preview-remove)::before {
+      content: "↑";
+      font-weight: 900;
+    }
+    .upload-row button:not(.preview-remove):hover {
+      background: var(--accent);
+      color: #fff;
     }
     .upload-status {
       color: var(--muted);
       font-size: 0.92rem;
       line-height: 1.6;
+    }
+    .preview-wrap {
+      position: relative;
+      display: inline-block;
+      margin-top: 4px;
+      max-width: 100%;
+    }
+    .preview-wrap img {
+      display: block;
+      max-width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+    .preview-wrap .preview-remove {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      background: rgba(17, 24, 39, 0.62);
+      color: #fff;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+    }
+    .preview-wrap .preview-remove:hover {
+      background: var(--danger);
     }
     .project-list {
       display: grid;
@@ -282,7 +362,10 @@
               <button class="secondary" type="button" id="upload-cover-button">上传本地图片</button>
               <span id="cover-upload-status" class="upload-status">想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。</span>
             </div>
-            <img id="cover-preview" alt="封面预览" style="display:none;max-width:100%;border-radius:12px;border:1px solid var(--line);" />
+            <div id="cover-preview-wrap" class="preview-wrap" style="display:none;">
+              <img id="cover-preview" alt="封面预览">
+              <button type="button" id="cover-remove" class="preview-remove" aria-label="删除封面图片" title="删除封面图片">×</button>
+            </div>
           </div>
           <label>
             视频链接（可选）
@@ -353,6 +436,8 @@
     const uploadCoverButton = document.getElementById("upload-cover-button");
     const coverUploadStatus = document.getElementById("cover-upload-status");
     const coverPreview = document.getElementById("cover-preview");
+    const coverPreviewWrap = document.getElementById("cover-preview-wrap");
+    const coverRemove = document.getElementById("cover-remove");
     const coverImageInput = document.getElementById("coverImage");
     const uploadContentImageButton = document.getElementById("upload-content-image-button");
     const contentImageStatus = document.getElementById("content-image-status");
@@ -510,10 +595,10 @@
     function showCoverPreview(url) {
       if (url) {
         coverPreview.src = url;
-        coverPreview.style.display = "block";
+        coverPreviewWrap.style.display = "inline-block";
       } else {
         coverPreview.removeAttribute("src");
-        coverPreview.style.display = "none";
+        coverPreviewWrap.style.display = "none";
       }
     }
 
@@ -673,6 +758,14 @@
     });
 
     coverImageInput.addEventListener("input", () => showCoverPreview(coverImageInput.value.trim()));
+
+    coverRemove.addEventListener("click", () => {
+      form.coverImage.value = "";
+      form.coverFile.value = "";
+      showCoverPreview("");
+      coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
+      setMessage("已移除封面图片，可重新上传或粘贴链接。");
+    });
 
     uploadContentImageButton.addEventListener("click", async () => {
       try {
