@@ -89,6 +89,11 @@
       border-radius: 20px;
       overflow: hidden;
       box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+      transition: transform 220ms ease, box-shadow 220ms ease;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 26px 50px rgba(15, 23, 42, 0.13);
     }
     .card img {
       width: 100%;
@@ -138,6 +143,21 @@
       font-weight: 700;
       text-decoration: none;
       align-self: flex-start;
+      transition: color 150ms ease, transform 150ms ease;
+    }
+    .link:hover {
+      color: var(--accent-dark);
+      transform: translateX(4px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card,
+      .link {
+        transition: none;
+      }
+      .card:hover,
+      .link:hover {
+        transform: none;
+      }
     }
     .empty, .error {
       background: white;

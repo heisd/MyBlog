@@ -93,6 +93,31 @@
       font: inherit;
       font-weight: 700;
       cursor: pointer;
+      transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease, background-color 150ms ease;
+      will-change: transform;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+      filter: brightness(1.05);
+    }
+    button:active {
+      transform: translateY(0) scale(0.96);
+      box-shadow: none;
+      filter: brightness(0.97);
+    }
+    button:focus-visible {
+      outline: 3px solid rgba(22, 101, 52, 0.4);
+      outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button {
+        transition: background-color 150ms ease;
+      }
+      button:hover,
+      button:active {
+        transform: none;
+      }
     }
     .primary {
       background: var(--accent);

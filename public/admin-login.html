@@ -71,6 +71,8 @@
       background: white;
     }
     button {
+      position: relative;
+      overflow: hidden;
       border: none;
       border-radius: 999px;
       padding: 13px 18px;
@@ -80,9 +82,48 @@
       background: var(--accent);
       color: white;
       margin-top: 8px;
+      transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, filter 200ms ease;
+      will-change: transform;
+    }
+    button::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -130%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+      transform: skewX(-20deg);
+      transition: left 600ms ease;
+      pointer-events: none;
     }
     button:hover {
       background: var(--accent-dark);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 14px 28px rgba(31, 31, 31, 0.18);
+    }
+    button:hover::after {
+      left: 140%;
+    }
+    button:active {
+      transform: translateY(0) scale(0.97);
+      box-shadow: 0 5px 12px rgba(31, 31, 31, 0.14);
+    }
+    button:focus-visible {
+      outline: 3px solid rgba(204, 106, 45, 0.45);
+      outline-offset: 3px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button,
+      button::after {
+        transition: background-color 200ms ease;
+      }
+      button:hover {
+        transform: none;
+      }
+      button:hover::after {
+        left: -130%;
+      }
     }
     .message {
       min-height: 22px;

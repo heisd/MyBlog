@@ -179,6 +179,8 @@
     }
 
     .button {
+      position: relative;
+      overflow: hidden;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -191,12 +193,41 @@
       font-size: 1rem;
       background: var(--accent);
       color: #fff;
-      transition: transform 180ms ease, box-shadow 180ms ease, opacity 160ms ease;
+      transition: transform 200ms ease, box-shadow 200ms ease, opacity 160ms ease, filter 200ms ease;
+      will-change: transform;
+    }
+
+    .button::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -130%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+      transform: skewX(-20deg);
+      transition: left 600ms ease;
+      pointer-events: none;
     }
 
     .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 14px 30px rgba(31, 31, 31, 0.12);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 16px 32px rgba(31, 31, 31, 0.18);
+      filter: brightness(1.05);
+    }
+
+    .button:hover::after {
+      left: 140%;
+    }
+
+    .button:active {
+      transform: translateY(0) scale(0.97);
+      box-shadow: 0 6px 14px rgba(31, 31, 31, 0.14);
+    }
+
+    .button:focus-visible {
+      outline: 3px solid rgba(204, 106, 45, 0.45);
+      outline-offset: 3px;
     }
 
     .button:disabled {
@@ -204,6 +235,24 @@
       cursor: not-allowed;
       transform: none;
       box-shadow: none;
+      filter: none;
+    }
+
+    .button:disabled::after {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .button,
+      .button::after {
+        transition: none;
+      }
+      .button:hover {
+        transform: none;
+      }
+      .button:hover::after {
+        left: -130%;
+      }
     }
 
     .status {
