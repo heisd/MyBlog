@@ -125,8 +125,11 @@ ClaudeAboutWeb/
 
 | 方式 | 触发条件 | 说明 |
 | --- | --- | --- |
-| **Resend HTTP API（推荐）** | 配置了 `RESEND_API_KEY` | 走 HTTPS，**绕过 Render 免费版对 SMTP 端口的封锁**，零成本 |
-| SMTP（备选） | 未配 Resend，但配了 `SMTP_USER`/`SMTP_PASS` | Render **免费实例已封禁出站 SMTP 端口**，需付费实例才可用 |
+| **Brevo HTTP API（最推荐）** | 配置了 `BREVO_API_KEY` | 走 HTTPS；**验证单个发件邮箱即可给任意收件人发信，无需自有域名**，免费 300 封/天 |
+| Resend HTTP API | 未配 Brevo，配了 `RESEND_API_KEY` | 走 HTTPS；免费版**没验证域名时只能发到你自己账号邮箱** |
+| SMTP（备选） | 都没配，但配了 `SMTP_USER`/`SMTP_PASS` | Render **免费实例已封禁出站 SMTP 端口**，需付费实例才可用 |
+
+> **想给任意访客发信（如留言回执、注册验证码）又不想买域名** → 用 **Brevo**：在 [brevo.com](https://www.brevo.com) 注册 → 验证一个发件邮箱（如你的 QQ 邮箱）→ 创建 API Key 填 `BREVO_API_KEY`，并把 `BREVO_SENDER` 设为该验证过的邮箱。优先级：Brevo > Resend > SMTP。
 
 > ⚠️ **重要**：Render 自 2025-09-26 起，免费 Web 服务封禁了出站 SMTP 端口（25/465/587），所以免费实例上 SMTP 一定连接超时。免费方案请用 Resend。
 
@@ -180,7 +183,7 @@ ClaudeAboutWeb/
      created_at timestamptz default now()
    );
    ```
-2. **邮件能发到任意访客邮箱**：Resend 免费版**没有验证域名时只能发到你自己账号邮箱**，访客收不到验证码。要让任意人能注册，需在 Resend **验证一个自有域名**，并把 `RESEND_FROM` 改为该域名地址。
+2. **邮件能发到任意访客邮箱**：注册验证码要发到访客自己的邮箱。**最简单的方式是用 Brevo**（见上文「在线留言」一节）——验证一个发件邮箱（如你的 QQ 邮箱）即可给任意人发信，无需域名。（若用 Resend 则需验证自有域名，否则只能发到你自己账号邮箱。）
 
 ## CORS 跨域配置
 

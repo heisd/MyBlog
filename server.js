@@ -97,6 +97,11 @@ const ACCESS_FROM = process.env.ACCESS_FROM || RESEND_FROM;
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 
+// Brevo（HTTP 邮件 API；验证「单个发件邮箱」即可给任意收件人发信，无需自有域名）。
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const BREVO_SENDER = process.env.BREVO_SENDER || CONTACT_TO;
+const BREVO_SENDER_NAME = process.env.BREVO_SENDER_NAME || "Heisd.Stark";
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -233,8 +238,51 @@ async function sendViaResend({ to, subject, text, replyTo }) {
   }
 }
 
-// 统一发信入口：优先 Resend（HTTPS），否则回退 SMTP。
+async function sendViaBrevo({ to, subject, text, replyTo }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const recipients = (Array.isArray(to) ? to : [to]).map((email) => ({ email }));
+    const body = {
+      sender: { name: BREVO_SENDER_NAME, email: BREVO_SENDER },
+      to: recipients,
+      subject,
+      textContent: text,
+    };
+    if (replyTo) body.replyTo = { email: replyTo };
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": BREVO_API_KEY,
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        detail = await response.text();
+      } catch {
+        detail = "";
+      }
+      throw new Error(`Brevo API ${response.status}: ${detail.slice(0, 300)}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 统一发信入口：优先 Brevo（单发件人验证即可发任意收件人），其次 Resend，最后 SMTP。
 async function sendEmailMessage({ to, subject, text, replyTo }) {
+  if (BREVO_API_KEY) {
+    await sendViaBrevo({ to, subject, text, replyTo });
+    return;
+  }
   if (RESEND_API_KEY) {
     await sendViaResend({ to, subject, text, replyTo });
     return;
@@ -247,7 +295,7 @@ async function sendEmailMessage({ to, subject, text, replyTo }) {
 }
 
 function emailConfigured() {
-  return Boolean(RESEND_API_KEY) || Boolean(SMTP_USER && SMTP_PASS);
+  return Boolean(BREVO_API_KEY) || Boolean(RESEND_API_KEY) || Boolean(SMTP_USER && SMTP_PASS);
 }
 
 app.use(
