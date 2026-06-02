@@ -3,192 +3,237 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>项目归档</title>
+  <title>项目归档 | Heisd.Stark</title>
   <style>
     :root {
-      --bg: #f4f6f8;
-      --card: #ffffff;
-      --ink: #1f2328;
-      --muted: #5d6670;
-      --line: #e2e8f0;
-      --accent: #fc5531;
-      --accent-dark: #d94323;
-      --tag-bg: #fff1ec;
+      --bg: #f4efe7;
+      --paper: rgba(255, 253, 247, 0.92);
+      --card: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6b625b;
+      --accent: #cc6a2d;
+      --accent-dark: #8e4317;
+      --line: #e5dbcf;
+      --shadow: 0 22px 50px rgba(68, 48, 30, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      font-family: Georgia, "Times New Roman", serif;
       color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      min-height: 100vh;
     }
-    header {
-      background: white;
-      border-bottom: 1px solid var(--line);
+    .topbar {
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(248, 244, 237, 0.78);
+      border-bottom: 1px solid rgba(229, 219, 207, 0.9);
     }
-    .bar {
-      max-width: 1100px;
+    .topbar-inner {
+      max-width: 1120px;
       margin: 0 auto;
       padding: 18px 24px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      gap: 16px;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
     }
     .brand {
-      font-size: 1.4rem;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-dark);
       text-decoration: none;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.95rem;
     }
     .nav {
       display: flex;
-      gap: 14px;
+      gap: 16px;
       flex-wrap: wrap;
     }
     .nav a {
       color: var(--muted);
       text-decoration: none;
-      font-weight: 600;
+      font-size: 0.96rem;
+      font-weight: 700;
     }
+    .nav a:hover { color: var(--accent-dark); }
     .wrap {
-      max-width: 1100px;
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 32px 24px 60px;
+      padding: 40px 24px 70px;
     }
     .hero {
-      background: radial-gradient(circle at top right, rgba(252,85,49,0.12), transparent 32%), white;
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      padding: 32px;
-      margin-bottom: 28px;
+      position: relative;
+      overflow: hidden;
+      background: var(--paper);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 26px;
+      padding: 40px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 14px;
     }
     .hero h1 {
-      margin: 0 0 10px;
-      font-size: clamp(2rem, 3vw, 3rem);
+      margin: 0 0 14px;
+      font-size: clamp(2.2rem, 4vw, 3.4rem);
+      line-height: 1.05;
     }
     .hero p {
       margin: 0;
-      max-width: 60ch;
+      max-width: 64ch;
       color: var(--muted);
-      line-height: 1.7;
+      line-height: 1.85;
+      font-size: 1.04rem;
     }
-    .list {
-      display: grid;
-      gap: 22px;
-    }
+    .list { display: grid; gap: 24px; }
     .card {
       display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 22px;
+      grid-template-columns: 320px 1fr;
       background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 20px;
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 24px;
       overflow: hidden;
-      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+      box-shadow: var(--shadow);
       transition: transform 220ms ease, box-shadow 220ms ease;
+      animation: card-in 600ms ease backwards;
+      animation-delay: calc(var(--i, 0) * 70ms);
+    }
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: none; }
     }
     .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 26px 50px rgba(15, 23, 42, 0.13);
+      transform: translateY(-5px);
+      box-shadow: 0 30px 60px rgba(68, 48, 30, 0.16);
     }
-    .card img {
+    .cover {
+      position: relative;
+      min-height: 220px;
+      background: linear-gradient(135deg, #f0ddc8, #e7cdb2 60%, #d9b896);
+    }
+    .cover-ph {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(142, 67, 23, 0.45);
+      font-size: 2.6rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+    .cover img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      min-height: 220px;
     }
+    .cover img.broken { display: none; }
     .content {
-      padding: 24px 24px 24px 0;
+      padding: 28px 30px;
       display: flex;
       flex-direction: column;
       justify-content: center;
     }
     .meta {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: var(--muted);
+      letter-spacing: 0.04em;
       margin-bottom: 10px;
     }
     .title {
-      margin: 0 0 10px;
-      font-size: 1.6rem;
+      margin: 0 0 12px;
+      font-size: 1.55rem;
       line-height: 1.25;
     }
     .summary {
       margin: 0 0 18px;
       color: var(--muted);
-      line-height: 1.8;
+      line-height: 1.85;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .tags {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
     .tag {
       display: inline-flex;
       align-items: center;
-      padding: 6px 10px;
+      padding: 6px 12px;
       border-radius: 999px;
-      background: var(--tag-bg);
+      background: rgba(204,106,45,0.12);
       color: var(--accent-dark);
-      font-size: 0.88rem;
+      font-size: 0.84rem;
       font-weight: 700;
     }
     .link {
-      color: var(--accent);
+      color: var(--accent-dark);
       font-weight: 700;
       text-decoration: none;
       align-self: flex-start;
-      transition: color 150ms ease, transform 150ms ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 150ms ease, gap 150ms ease;
     }
-    .link:hover {
-      color: var(--accent-dark);
-      transform: translateX(4px);
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .card,
-      .link {
-        transition: none;
-      }
-      .card:hover,
-      .link:hover {
-        transform: none;
-      }
-    }
+    .link:hover { color: var(--accent); gap: 12px; }
     .empty, .error {
-      background: white;
+      background: var(--paper);
       border: 1px dashed var(--line);
-      border-radius: 18px;
-      padding: 28px;
+      border-radius: 20px;
+      padding: 30px;
       color: var(--muted);
+      line-height: 1.8;
+      text-align: center;
     }
     @media (max-width: 760px) {
-      .card {
-        grid-template-columns: 1fr;
-      }
-      .content {
-        padding: 0 20px 22px;
-      }
+      .card { grid-template-columns: 1fr; }
+      .cover { min-height: 200px; height: 200px; }
+      .content { padding: 22px 22px 24px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card, .link { transition: none; animation: none; }
+      .card:hover, .link:hover { transform: none; gap: 6px; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="bar">
-      <a class="brand" href="/">机器人博客</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
       <nav class="nav">
+        <a href="/">首页</a>
         <a href="/projects">项目归档</a>
-        <a href="/admin-login">后台登录</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
       </nav>
     </div>
   </header>
 
   <main class="wrap">
     <section class="hero">
+      <div class="eyebrow">Project Archive</div>
       <h1>项目归档</h1>
       <p>这里整理了我的机器人、视觉与 AI 项目文章。每个项目都包含摘要、封面和完整正文；如果配置了演示视频，也会在详情页中直接展示。</p>
     </section>
@@ -248,6 +293,11 @@
       }
     }
 
+    function firstChar(text) {
+      const trimmed = String(text || "").trim();
+      return trimmed ? escapeHtml(trimmed.charAt(0)) : "◎";
+    }
+
     async function loadProjects() {
       const container = document.getElementById("projects-list");
       container.innerHTML = "<div class='empty'>正在加载项目...</div>";
@@ -277,9 +327,14 @@
           return;
         }
 
-        container.innerHTML = projects.map((project) => `
-          <article class="card">
-            <img src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}">
+        container.innerHTML = projects.map((project, index) => `
+          <article class="card" style="--i:${index}">
+            <div class="cover">
+              <span class="cover-ph">${firstChar(project.title)}</span>
+              <img src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}"
+                   loading="lazy" referrerpolicy="no-referrer"
+                   onerror="this.classList.add('broken')">
+            </div>
             <div class="content">
               <div class="meta">${escapeHtml(project.date || "未设置日期")}</div>
               <h2 class="title">${escapeHtml(project.title)}</h2>
@@ -287,14 +342,14 @@
               <div class="tags">
                 ${project.videoUrl ? '<span class="tag">含演示视频</span>' : '<span class="tag">图文项目</span>'}
               </div>
-              <a class="link" href="/project/${encodeURIComponent(project.id)}">查看全文</a>
+              <a class="link" href="/project/${encodeURIComponent(project.id)}">查看全文 →</a>
             </div>
           </article>
         `).join("");
 
         attachCardTilt();
       } catch (error) {
-        container.innerHTML = `<div class="error">${error.message}</div>`;
+        container.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
       }
     }
 
@@ -310,7 +365,7 @@
           const py = (event.clientY - rect.top) / rect.height - 0.5;
           card.style.transition = "transform 80ms ease";
           card.style.transform =
-            `perspective(900px) rotateX(${(-py * 6).toFixed(2)}deg) rotateY(${(px * 8).toFixed(2)}deg) translateY(-4px)`;
+            `perspective(1000px) rotateX(${(-py * 4).toFixed(2)}deg) rotateY(${(px * 6).toFixed(2)}deg) translateY(-5px)`;
         });
         card.addEventListener("mouseleave", () => {
           card.style.transition = "transform 320ms ease, box-shadow 320ms ease";
