@@ -206,6 +206,19 @@
       object-fit: cover;
     }
     .cover img.broken { display: none; }
+    .pin-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 999px;
+      box-shadow: 0 6px 16px rgba(204, 106, 45, 0.4);
+    }
     .content { padding: 22px 24px 24px; }
     .meta {
       font-size: 0.85rem;
@@ -302,6 +315,7 @@
         <input id="search" type="search" placeholder="搜索项目标题或摘要…" autocomplete="off">
       </div>
       <div class="filters" id="filters"></div>
+      <button type="button" class="chip" id="sort-toggle" title="切换时间排序">最新优先</button>
     </div>
 
     <section id="projects-list" class="list"></section>
@@ -318,6 +332,19 @@
     let allProjects = [];
     let activeCategory = "全部";
     let searchTerm = "";
+    let sortOrder = "newest";
+
+    // 置顶项目始终排在前，其余按日期（新→旧 或 旧→新）排序。
+    function sortProjects(list) {
+      return list.slice().sort((a, b) => {
+        const pa = a.pinned ? 1 : 0;
+        const pb = b.pinned ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+        const da = a.date || "";
+        const db = b.date || "";
+        return sortOrder === "newest" ? db.localeCompare(da) : da.localeCompare(db);
+      });
+    }
 
     // 关键词分类规则：按从“具体”到“宽泛”的优先级匹配，命中第一个即归类。
     // （机器人/嵌入式较宽泛，放在视觉/语音/AI 之后，避免抢分类。）
@@ -405,6 +432,7 @@
       return `
         <article class="card" style="--i:${index}">
           <div class="cover">
+            ${project.pinned ? '<span class="pin-badge">★ 置顶</span>' : ""}
             <span class="cover-ph">${firstChar(project.title)}</span>
             <img src="${escapeHtml(project.coverImage)}" alt="${escapeHtml(project.title)}"
                  loading="lazy" referrerpolicy="no-referrer"
@@ -457,7 +485,7 @@
         return;
       }
 
-      listEl.innerHTML = filtered.map((project, index) => cardHtml(project, index)).join("");
+      listEl.innerHTML = sortProjects(filtered).map((project, index) => cardHtml(project, index)).join("");
       attachCardTilt();
     }
 
@@ -492,6 +520,12 @@
 
     searchInput.addEventListener("input", () => {
       searchTerm = searchInput.value.trim().toLowerCase();
+      render(false);
+    });
+
+    document.getElementById("sort-toggle").addEventListener("click", (event) => {
+      sortOrder = sortOrder === "newest" ? "oldest" : "newest";
+      event.currentTarget.textContent = sortOrder === "newest" ? "最新优先" : "最早优先";
       render(false);
     });
 

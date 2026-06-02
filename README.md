@@ -176,6 +176,8 @@ create table projects (
   "coverImage" text,
   "videoUrl" text,
   tags text[] default '{}',
+  status text default 'published',
+  pinned boolean default false,
   content text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
@@ -197,6 +199,21 @@ alter table projects add column if not exists tags text[] default '{}';
 ```
 
 > 后端做了**容错**：未执行该迁移时，项目仍可正常读取/创建/编辑（仅暂时忽略标签，列表回退到关键词自动分类）。执行迁移后，后台填写的标签即生效。
+
+### 草稿状态 / 置顶（status & pinned）
+
+后台支持把项目存为**草稿**（不在前台显示）和**置顶**（前台优先展示）。需要给表加两列（见 [`data/migration-add-status-pinned.sql`](data/migration-add-status-pinned.sql)）：
+
+```sql
+alter table projects add column if not exists status text default 'published';
+alter table projects add column if not exists pinned boolean default false;
+```
+
+- 公开接口 `GET /api/projects` 只返回**已发布**项目，且**置顶优先**、再按日期倒序
+- 后台接口 `GET /api/admin/projects`（需登录）返回**全部**（含草稿）
+- `PATCH /api/projects/:id`（需登录）用于在后台列表快速切换置顶/草稿，无需重传全文
+- 后台列表可按**状态/标签**筛选并显示徽章；项目页可切换**最新/最早**排序，置顶项目带「★ 置顶」标记
+- 同样**容错**：未执行迁移时不影响现有功能（仅忽略草稿/置顶；快捷开关会提示先执行迁移）
 
 ## 本地运行
 
