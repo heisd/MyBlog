@@ -524,6 +524,15 @@
         }
 
         allProjects = projects;
+
+        // 支持从详情页点击标签跳转过来时预选该分类（/projects?tag=视觉）。
+        const wantTag = new URLSearchParams(window.location.search).get("tag");
+        if (wantTag) {
+          const present = new Set();
+          allProjects.forEach((project) => projectTags(project).forEach((tag) => present.add(tag)));
+          if (present.has(wantTag)) activeCategory = wantTag;
+        }
+
         buildFilters();
         toolbar.style.display = "flex";
         render(true);
