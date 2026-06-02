@@ -1060,6 +1060,10 @@ app.get("/contact", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "contact.html"));
 });
 
+app.get("/welcome", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "welcome.html"));
+});
+
 app.get("/project/:id", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "project-detail.html"));
 });

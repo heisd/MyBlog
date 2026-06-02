@@ -70,6 +70,7 @@ ClaudeAboutWeb/
 │   └── projects-import.csv
 └── public/
     ├── index.html
+    ├── welcome.html
     ├── projects.html
     ├── project-detail.html
     ├── contact.html
@@ -87,6 +88,7 @@ ClaudeAboutWeb/
 ## 页面路由
 
 - `/`：博客首页
+- `/welcome`：项目欢迎页（点击"项目归档/浏览项目"先进入此过渡页，再进入项目列表）
 - `/projects`：项目列表页
 - `/project/:id`：项目详情页
 - `/contact`：在线留言页（访客可直接给站长发消息）
