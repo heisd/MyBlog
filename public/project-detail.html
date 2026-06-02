@@ -214,12 +214,70 @@
       line-height: 1.8;
       text-align: center;
     }
+    body { transition: opacity 400ms ease; }
+    body.leaving { opacity: 0; }
+    .pager {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 28px;
+    }
+    .pager-link {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 20px 24px;
+      background: var(--card);
+      border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 20px;
+      text-decoration: none;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+    }
+    .pager-link.next { text-align: right; align-items: flex-end; }
+    .pager-link:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+      box-shadow: 0 28px 52px rgba(68, 48, 30, 0.16);
+    }
+    .pager-link .dir {
+      color: var(--accent-dark);
+      font-weight: 700;
+      font-size: 0.88rem;
+      letter-spacing: 0.02em;
+      transition: transform 200ms ease;
+    }
+    .pager-link.prev:hover .dir { transform: translateX(-5px); }
+    .pager-link.next:hover .dir { transform: translateX(5px); }
+    .pager-link .ptitle {
+      font-size: 1.12rem;
+      font-weight: 700;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .pager-empty { display: none; }
+    .pager-hint {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 14px;
+    }
+    @media (max-width: 600px) {
+      .pager { grid-template-columns: 1fr; }
+      .pager-link.next { text-align: left; align-items: flex-start; }
+      .pager-empty { display: none; }
+    }
     @media (max-width: 640px) {
       article { padding: 26px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .back, .tag { transition: none; }
-      .back:hover, .tag:hover { transform: none; }
+      .back, .tag, .pager-link, .pager-link .dir, body { transition: none; }
+      .back:hover, .tag:hover, .pager-link:hover { transform: none; }
+      .pager-link.prev:hover .dir, .pager-link.next:hover .dir { transform: none; }
     }
   </style>
 </head>
@@ -243,6 +301,19 @@
 
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let prevUrl = null;
+    let nextUrl = null;
+
+    function leaveTo(url) {
+      if (!url) return;
+      if (reduceMotion) {
+        window.location.href = url;
+        return;
+      }
+      document.body.classList.add("leaving");
+      setTimeout(() => { window.location.href = url; }, 400);
+    }
 
     function getProjectId() {
       const params = new URLSearchParams(window.location.search);
@@ -356,11 +427,66 @@
             <div class="content">${project.content}</div>
           </article>
         `;
+        setupPager(project.id);
       } catch (error) {
         root.className = "state";
         root.textContent = error.message;
       }
     }
+
+    // 基于公开列表（已发布、置顶优先、按日期）渲染上一篇/下一篇。
+    async function setupPager(currentId) {
+      let list;
+      try {
+        const result = await fetchWithWake(`${API_BASE}/api/projects`);
+        if (!result.ok || !Array.isArray(result.data)) return;
+        list = result.data;
+      } catch {
+        return;
+      }
+
+      const index = list.findIndex((p) => p.id === currentId);
+      if (index === -1 || list.length < 2) return;
+
+      const prev = list[index - 1] || null;
+      const next = list[index + 1] || null;
+      prevUrl = prev ? `/project/${encodeURIComponent(prev.id)}` : null;
+      nextUrl = next ? `/project/${encodeURIComponent(next.id)}` : null;
+
+      const cell = (proj, cls, dir) =>
+        proj
+          ? `<a class="pager-link ${cls}" href="/project/${encodeURIComponent(proj.id)}"><span class="dir">${dir}</span><span class="ptitle">${escapeHtml(proj.title)}</span></a>`
+          : `<span class="pager-empty"></span>`;
+
+      const nav = document.createElement("nav");
+      nav.className = "pager";
+      nav.innerHTML = cell(prev, "prev", "← 上一篇") + cell(next, "next", "下一篇 →");
+      nav.querySelectorAll(".pager-link").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          leaveTo(link.getAttribute("href"));
+        });
+      });
+
+      const hint = document.createElement("p");
+      hint.className = "pager-hint";
+      hint.textContent = "提示：也可以用键盘 ← / → 翻页";
+
+      const wrap = document.querySelector(".wrap");
+      wrap.appendChild(nav);
+      wrap.appendChild(hint);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.key === "ArrowLeft" && prevUrl) leaveTo(prevUrl);
+      if (event.key === "ArrowRight" && nextUrl) leaveTo(nextUrl);
+    });
+
+    document.querySelector(".back").addEventListener("click", (event) => {
+      event.preventDefault();
+      leaveTo(event.currentTarget.getAttribute("href"));
+    });
 
     loadProject();
   </script>
