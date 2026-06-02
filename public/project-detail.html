@@ -319,8 +319,76 @@
       font-weight: 700;
     }
     .toc-link.lvl-3 { padding-left: 20px; font-size: 0.86rem; }
+    .toc-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 45;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 26px rgba(204, 106, 45, 0.45);
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    .toc-fab:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(204, 106, 45, 0.5); }
+    .toc-fab:active { transform: translateY(0) scale(0.97); }
+    .toc-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.42);
+      z-index: 44;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 250ms ease;
+    }
+    .toc-backdrop.open { opacity: 1; pointer-events: auto; }
+    .toc-close { display: none; }
     @media (min-width: 1340px) {
       .toc-panel.show { display: block; }
+    }
+    @media (max-width: 1339px) {
+      .toc-panel.show {
+        display: block;
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: auto;
+        width: min(84vw, 320px);
+        height: 100%;
+        max-height: 100%;
+        border-radius: 18px 0 0 18px;
+        padding-top: 54px;
+        transform: translateX(106%);
+        transition: transform 280ms ease;
+        z-index: 46;
+      }
+      .toc-panel.show.open { transform: translateX(0); }
+      .toc-fab.show { display: inline-flex; }
+      .toc-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(17, 24, 39, 0.08);
+        color: var(--ink);
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+      }
     }
     @media (max-width: 600px) {
       .pager { grid-template-columns: 1fr; }
@@ -334,13 +402,16 @@
       .back, .tag, .pager-link, .pager-link .dir, .toc-link, body { transition: none; }
       .back:hover, .tag:hover, .pager-link:hover { transform: none; }
       .pager-link.prev:hover .dir, .pager-link.next:hover .dir { transform: none; }
-      .progress-bar { transition: none; }
+      .progress-bar, .toc-backdrop, .toc-fab { transition: none; }
+      .toc-panel.show { transition: none; }
     }
   </style>
 </head>
 <body>
   <div class="progress-bar" id="progress-bar"></div>
   <aside class="toc-panel" id="toc-panel" aria-label="目录"></aside>
+  <button class="toc-fab" id="toc-fab" type="button" aria-label="打开目录">☰ 目录</button>
+  <div class="toc-backdrop" id="toc-backdrop"></div>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">Heisd.Stark</a>
@@ -540,8 +611,21 @@
     // ---- 阅读进度条 + 目录 ----
     const progressBar = document.getElementById("progress-bar");
     const tocPanel = document.getElementById("toc-panel");
+    const tocFab = document.getElementById("toc-fab");
+    const tocBackdrop = document.getElementById("toc-backdrop");
     let headings = [];
     let tocLinks = [];
+
+    function openDrawer() {
+      tocPanel.classList.add("open");
+      tocBackdrop.classList.add("open");
+    }
+    function closeDrawer() {
+      tocPanel.classList.remove("open");
+      tocBackdrop.classList.remove("open");
+    }
+    tocFab.addEventListener("click", openDrawer);
+    tocBackdrop.addEventListener("click", closeDrawer);
 
     function updateOnScroll() {
       const docH = document.documentElement.scrollHeight - window.innerHeight;
@@ -580,6 +664,7 @@
         if (!heading.id) heading.id = `sec-${i}`;
       });
       tocPanel.innerHTML =
+        '<button class="toc-close" type="button" aria-label="关闭目录">×</button>' +
         '<div class="toc-title">目录</div>' +
         headings
           .map(
@@ -589,7 +674,12 @@
           .join("");
       tocLinks = Array.from(tocPanel.querySelectorAll(".toc-link"));
       tocPanel.classList.add("show");
+      tocFab.classList.add("show");
       tocPanel.addEventListener("click", (event) => {
+        if (event.target.closest(".toc-close")) {
+          closeDrawer();
+          return;
+        }
         const link = event.target.closest("a[data-target]");
         if (!link) return;
         event.preventDefault();
@@ -598,11 +688,13 @@
           target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
           history.replaceState(null, "", `#${link.dataset.target}`);
         }
+        closeDrawer();
       });
       updateOnScroll();
     }
 
     document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeDrawer();
       if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
       if (event.key === "ArrowLeft" && prevUrl) leaveTo(prevUrl);
       if (event.key === "ArrowRight" && nextUrl) leaveTo(nextUrl);
