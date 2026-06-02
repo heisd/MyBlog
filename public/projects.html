@@ -291,9 +291,32 @@
             </div>
           </article>
         `).join("");
+
+        attachCardTilt();
       } catch (error) {
         container.innerHTML = `<div class="error">${error.message}</div>`;
       }
+    }
+
+    // 鼠标在卡片上移动时做 3D 倾斜，离开时复位（尊重 prefers-reduced-motion）。
+    function attachCardTilt() {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        return;
+      }
+      document.querySelectorAll(".card").forEach((card) => {
+        card.addEventListener("mousemove", (event) => {
+          const rect = card.getBoundingClientRect();
+          const px = (event.clientX - rect.left) / rect.width - 0.5;
+          const py = (event.clientY - rect.top) / rect.height - 0.5;
+          card.style.transition = "transform 80ms ease";
+          card.style.transform =
+            `perspective(900px) rotateX(${(-py * 6).toFixed(2)}deg) rotateY(${(px * 8).toFixed(2)}deg) translateY(-4px)`;
+        });
+        card.addEventListener("mouseleave", () => {
+          card.style.transition = "transform 320ms ease, box-shadow 320ms ease";
+          card.style.transform = "";
+        });
+      });
     }
 
     loadProjects();
