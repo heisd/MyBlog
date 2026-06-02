@@ -150,6 +150,11 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .chip-n {
+      margin-left: 6px;
+      font-size: 0.78rem;
+      opacity: 0.7;
+    }
 
     .list {
       columns: 330px;
@@ -346,6 +351,12 @@
       return "其他";
     }
 
+    // 优先用后台填写的真实标签；没有标签的旧项目回退到关键词自动分类。
+    function projectTags(project) {
+      const tags = Array.isArray(project.tags) ? project.tags.filter(Boolean) : [];
+      return tags.length ? tags : [detectCategory(project)];
+    }
+
     function delay(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
@@ -387,7 +398,10 @@
     }
 
     function cardHtml(project, index) {
-      const category = detectCategory(project);
+      const tagsHtml = projectTags(project)
+        .slice(0, 4)
+        .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
+        .join("");
       return `
         <article class="card" style="--i:${index}">
           <div class="cover">
@@ -401,7 +415,7 @@
             <h2 class="title">${escapeHtml(project.title)}</h2>
             <p class="summary">${escapeHtml(project.summary)}</p>
             <div class="tags">
-              <span class="tag">${escapeHtml(category)}</span>
+              ${tagsHtml}
               ${project.videoUrl ? '<span class="tag tag-soft">含演示视频</span>' : ""}
             </div>
             <a class="link" href="/project/${encodeURIComponent(project.id)}">查看全文 →</a>
@@ -410,23 +424,30 @@
     }
 
     function buildFilters() {
-      const present = new Set(allProjects.map(detectCategory));
-      const names = ["全部"]
-        .concat(CATEGORY_RULES.map((rule) => rule.name).filter((name) => present.has(name)))
-        .concat(present.has("其他") ? ["其他"] : []);
+      const counts = new Map();
+      allProjects.forEach((project) => {
+        projectTags(project).forEach((tag) => counts.set(tag, (counts.get(tag) || 0) + 1));
+      });
+      const preferred = ["视觉", "语音", "AI", "机器人", "嵌入式", "其他"];
+      const tags = Array.from(counts.keys()).sort((a, b) => {
+        const ra = preferred.indexOf(a) === -1 ? 999 : preferred.indexOf(a);
+        const rb = preferred.indexOf(b) === -1 ? 999 : preferred.indexOf(b);
+        return ra !== rb ? ra - rb : a.localeCompare(b, "zh");
+      });
+      const names = ["全部"].concat(tags);
       filtersEl.innerHTML = names
-        .map(
-          (name) =>
-            `<button type="button" class="chip${name === activeCategory ? " active" : ""}" data-cat="${escapeHtml(name)}">${escapeHtml(name)}</button>`
-        )
+        .map((name) => {
+          const count = name === "全部" ? allProjects.length : counts.get(name);
+          return `<button type="button" class="chip${name === activeCategory ? " active" : ""}" data-cat="${escapeHtml(name)}">${escapeHtml(name)}<span class="chip-n">${count}</span></button>`;
+        })
         .join("");
     }
 
     function render(animate = false) {
       listEl.classList.toggle("no-anim", !animate);
       const filtered = allProjects.filter((project) => {
-        const inCategory = activeCategory === "全部" || detectCategory(project) === activeCategory;
-        const haystack = `${project.title || ""} ${project.summary || ""}`.toLowerCase();
+        const inCategory = activeCategory === "全部" || projectTags(project).includes(activeCategory);
+        const haystack = `${project.title || ""} ${project.summary || ""} ${projectTags(project).join(" ")}`.toLowerCase();
         const inSearch = !searchTerm || haystack.includes(searchTerm);
         return inCategory && inSearch;
       });

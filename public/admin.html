@@ -174,6 +174,78 @@
       font-size: 0.92rem;
       line-height: 1.6;
     }
+    .tag-input {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fbfdff;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .tag-input:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.14);
+    }
+    .tag-chips { display: contents; }
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #e7f0ea;
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 5px 6px 5px 12px;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .tag-pill button {
+      background: none;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-size: 1.05rem;
+      line-height: 1;
+      padding: 0 4px;
+      border-radius: 50%;
+    }
+    .tag-input input {
+      flex: 1;
+      min-width: 150px;
+      border: none;
+      outline: none;
+      background: transparent;
+      padding: 4px;
+      font: inherit;
+    }
+    .tag-suggest {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: -4px;
+      align-items: center;
+    }
+    .tag-suggest .label {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .tag-suggest button {
+      background: #fff;
+      border: 1px dashed var(--line);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .tag-suggest button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
     .upload-row {
       display: grid;
       gap: 12px;
@@ -489,6 +561,16 @@
             <textarea id="summary" name="summary" required></textarea>
           </label>
           <label>
+            标签（用于分类筛选，可填多个）
+            <div class="tag-input" id="tag-input">
+              <span class="tag-chips" id="tag-chips"></span>
+              <input id="tagField" type="text" placeholder="输入标签后按回车或逗号添加" autocomplete="off">
+            </div>
+          </label>
+          <div class="tag-suggest" id="tag-suggest">
+            <span class="label">快速添加：</span>
+          </div>
+          <label>
             封面图片链接（可粘贴外链，或用下方上传本地图片）
             <input id="coverImage" name="coverImage" type="url" required>
           </label>
@@ -611,6 +693,11 @@
     const replaceApply = document.getElementById("replace-apply");
     const replaceKeep = document.getElementById("replace-keep");
     const FILE_INPUT_IDS = ["coverFile", "videoFile", "docFile", "contentImageFile"];
+    const tagField = document.getElementById("tagField");
+    const tagChips = document.getElementById("tag-chips");
+    const tagSuggest = document.getElementById("tag-suggest");
+    const TAG_SUGGESTIONS = ["视觉", "语音", "AI", "机器人", "嵌入式"];
+    let currentTags = [];
     const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
     const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
     const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
@@ -629,6 +716,47 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+    }
+
+    function renderTags() {
+      tagChips.innerHTML = currentTags
+        .map(
+          (tag) =>
+            `<span class="tag-pill">${escapeHtml(tag)}<button type="button" data-tag="${escapeHtml(tag)}" aria-label="移除标签">×</button></span>`
+        )
+        .join("");
+    }
+
+    function setTags(tags) {
+      const seen = new Set();
+      currentTags = [];
+      (Array.isArray(tags) ? tags : []).forEach((value) => {
+        const tag = String(value).trim().slice(0, 24);
+        if (tag && !seen.has(tag)) {
+          seen.add(tag);
+          currentTags.push(tag);
+        }
+      });
+      renderTags();
+    }
+
+    function addTag(value) {
+      const tag = String(value || "").trim().slice(0, 24);
+      if (!tag || currentTags.length >= 12 || currentTags.includes(tag)) return;
+      currentTags.push(tag);
+      renderTags();
+    }
+
+    function removeTag(tag) {
+      currentTags = currentTags.filter((item) => item !== tag);
+      renderTags();
+    }
+
+    function flushPendingTag() {
+      if (tagField.value.trim()) {
+        addTag(tagField.value);
+        tagField.value = "";
+      }
     }
 
     function fileExt(name) {
@@ -768,6 +896,8 @@
       contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
       docImportStatus.textContent = DEFAULT_DOC_STATUS;
       showCoverPreview("");
+      setTags([]);
+      tagField.value = "";
       FILE_INPUT_IDS.forEach((id) => {
         const input = document.getElementById(id);
         if (input) renderChips(input);
@@ -1034,13 +1164,15 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      flushPendingTag();
 
       const payload = {
         title: form.title.value.trim(),
         summary: form.summary.value.trim(),
         coverImage: form.coverImage.value.trim(),
         videoUrl: form.videoUrl.value.trim(),
-        content: form.content.value.trim()
+        content: form.content.value.trim(),
+        tags: currentTags
       };
 
       const method = editingId ? "PUT" : "POST";
@@ -1135,6 +1267,7 @@
           form.coverImage.value = project.coverImage;
           form.videoUrl.value = project.videoUrl || "";
           form.content.value = project.content;
+          setTags(project.tags || []);
           showCoverPreview(project.coverImage);
           coverUploadStatus.textContent = "当前封面已填入。你也可以重新上传本地图片覆盖它。";
           uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
@@ -1169,6 +1302,27 @@
     FILE_INPUT_IDS.forEach((id) => {
       const input = document.getElementById(id);
       if (input) setupDropzone(input);
+    });
+
+    tagField.addEventListener("keydown", (event) => {
+      if (["Enter", ",", "，", "、"].includes(event.key)) {
+        event.preventDefault();
+        flushPendingTag();
+      } else if (event.key === "Backspace" && !tagField.value && currentTags.length) {
+        removeTag(currentTags[currentTags.length - 1]);
+      }
+    });
+    tagField.addEventListener("blur", flushPendingTag);
+    tagChips.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-tag]");
+      if (btn) removeTag(btn.dataset.tag);
+    });
+    TAG_SUGGESTIONS.forEach((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `+ ${suggestion}`;
+      button.addEventListener("click", () => addTag(suggestion));
+      tagSuggest.appendChild(button);
     });
 
     verifySession().then((ok) => {

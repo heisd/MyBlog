@@ -175,6 +175,7 @@ create table projects (
   summary text,
   "coverImage" text,
   "videoUrl" text,
+  tags text[] default '{}',
   content text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
@@ -186,6 +187,16 @@ create table projects (
 ```sql
 alter table projects add column if not exists "videoUrl" text;
 ```
+
+### 标签 / 分类（tags）
+
+后台支持给每个项目打**标签**，项目归档页据此做**真实分类筛选**（没有标签的旧项目自动回退到关键词分类）。启用需要给表加 `tags` 列（见 [`data/migration-add-tags.sql`](data/migration-add-tags.sql)）：
+
+```sql
+alter table projects add column if not exists tags text[] default '{}';
+```
+
+> 后端做了**容错**：未执行该迁移时，项目仍可正常读取/创建/编辑（仅暂时忽略标签，列表回退到关键词自动分类）。执行迁移后，后台填写的标签即生效。
 
 ## 本地运行
 

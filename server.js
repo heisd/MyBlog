@@ -415,12 +415,39 @@ function toListItem(project) {
     summary: project.summary,
     coverImage: project.coverImage,
     videoUrl: project.videoUrl,
+    tags: Array.isArray(project.tags) ? project.tags : [],
   };
 }
 
 function validateProjectInput(body) {
   const requiredFields = ["title", "summary", "content", "coverImage"];
   return requiredFields.filter((field) => !String(body[field] || "").trim());
+}
+
+// 标签归一化：支持数组或「逗号/顿号/中文逗号」分隔的字符串；去重、去空、限长。
+function normalizeTags(value) {
+  let list = [];
+  if (Array.isArray(value)) {
+    list = value;
+  } else if (typeof value === "string") {
+    list = value.split(/[,，、]/);
+  }
+  const seen = new Set();
+  const result = [];
+  for (const item of list) {
+    const tag = String(item).trim().slice(0, 24);
+    if (tag && !seen.has(tag)) {
+      seen.add(tag);
+      result.push(tag);
+    }
+    if (result.length >= 12) break;
+  }
+  return result;
+}
+
+// 数据库还没加 tags 列时的容错判断（兼容未执行迁移的情况）。
+function isMissingTagsColumn(error) {
+  return Boolean(error) && /tags/i.test(`${error.message || ""} ${error.details || ""}`);
 }
 
 async function ensureUniqueProjectId(title) {
@@ -900,11 +927,20 @@ app.post("/api/uploads/document", requireAdmin, documentUpload.single("document"
 
 app.get("/api/projects", async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
-      .select("id, title, date, summary, coverImage, videoUrl")
+      .select("id, title, date, summary, coverImage, videoUrl, tags")
       .order("date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
+
+    // 若数据库尚未执行 tags 迁移，自动回退到不带 tags 的查询，避免列表整体报错。
+    if (error && isMissingTagsColumn(error)) {
+      ({ data, error } = await supabase
+        .from("projects")
+        .select("id, title, date, summary, coverImage, videoUrl")
+        .order("date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }));
+    }
 
     if (error) {
       throw error;
@@ -959,13 +995,20 @@ app.post("/api/projects", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      tags: normalizeTags(req.body.tags),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
       .insert(project)
       .select("*")
       .single();
+
+    // 尚未执行 tags 迁移时，去掉 tags 再保存（项目仍可创建，只是暂无标签）。
+    if (error && isMissingTagsColumn(error)) {
+      const { tags, ...withoutTags } = project;
+      ({ data, error } = await supabase.from("projects").insert(withoutTags).select("*").single());
+    }
 
     if (error) {
       throw error;
@@ -1008,16 +1051,27 @@ app.put("/api/projects/:id", requireAdmin, async (req, res) => {
       content: req.body.content.trim(),
       coverImage: req.body.coverImage.trim(),
       videoUrl: String(req.body.videoUrl || "").trim() || null,
+      tags: normalizeTags(req.body.tags),
       date: req.body.date ? normalizeDate(req.body.date) : existing.date,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("projects")
       .update(updatedProject)
       .eq("id", req.params.id)
       .select("*")
       .single();
+
+    if (error && isMissingTagsColumn(error)) {
+      const { tags, ...withoutTags } = updatedProject;
+      ({ data, error } = await supabase
+        .from("projects")
+        .update(withoutTags)
+        .eq("id", req.params.id)
+        .select("*")
+        .single());
+    }
 
     if (error) {
       throw error;
