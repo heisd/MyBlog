@@ -608,6 +608,34 @@ function firstParagraphText(html) {
   return match ? htmlToPlainText(match[1]) : "";
 }
 
+function clipText(text, maxLen) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen).trim()}…`;
+}
+
+// 识别文档前部显式标注的「标题：xxx」「摘要：xxx」等（中英文、半/全角冒号），
+// 也支持标签独占一行、值在下一行的写法。
+function detectLabeled(plainText, labels) {
+  const lines = String(plainText || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 15);
+  const alt = labels.join("|");
+  const inlineRe = new RegExp(`^(?:${alt})\\s*[:：]\\s*(.+)$`, "i");
+  const bareRe = new RegExp(`^(?:${alt})\\s*[:：]?\\s*$`, "i");
+  for (let i = 0; i < lines.length; i += 1) {
+    const inline = lines[i].match(inlineRe);
+    if (inline && inline[1].trim()) {
+      return inline[1].trim();
+    }
+    if (bareRe.test(lines[i]) && lines[i + 1]) {
+      return lines[i + 1].trim();
+    }
+  }
+  return "";
+}
+
 // 轻量健康检查端点：不访问数据库，专供 UptimeRobot 等保活监控定时 ping，
 // 让 Render 免费实例保持唤醒，避免闲置休眠后的冷启动。
 app.get("/healthz", (req, res) => {
@@ -836,8 +864,25 @@ app.post("/api/uploads/document", requireAdmin, documentUpload.single("document"
     const { html: htmlWithIds, outline } = addHeadingAnchors(rawHtml);
     const toc = buildTocHtml(outline);
     const plain = htmlToPlainText(htmlWithIds);
-    const summary = deriveSummary(firstParagraphText(htmlWithIds) || plain);
-    const title = (outline[0] && outline[0].text) || deriveSummary(plain, 60);
+
+    // 识别优先级：文档显式标注 > 首个标题 / 首段 > 文件名兜底。
+    const labeledTitle = detectLabeled(plain, ["标题", "题目", "title"]);
+    const labeledSummary = detectLabeled(plain, [
+      "摘要",
+      "简介",
+      "内容简介",
+      "abstract",
+      "summary",
+    ]);
+    const baseName = path.parse(req.file.originalname || "").name;
+
+    const title = clipText(
+      labeledTitle || (outline[0] && outline[0].text) || baseName || deriveSummary(plain, 60),
+      120
+    );
+    const summary = labeledSummary
+      ? clipText(labeledSummary, 160)
+      : deriveSummary(firstParagraphText(htmlWithIds) || plain);
 
     return res.status(201).json({
       html: toc + htmlWithIds,
@@ -1013,6 +1058,10 @@ app.get("/projects", (req, res) => {
 
 app.get("/contact", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "contact.html"));
+});
+
+app.get("/welcome", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "welcome.html"));
 });
 
 app.get("/project/:id", (req, res) => {
