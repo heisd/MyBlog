@@ -469,6 +469,15 @@
       setTimeout(() => { window.location.href = url; }, 400);
     }
 
+    function accessHeaders() {
+      const headers = {};
+      const visitor = localStorage.getItem("visitorAccessToken");
+      if (visitor) headers["X-Access-Token"] = visitor;
+      const admin = localStorage.getItem("adminToken");
+      if (admin) headers["Authorization"] = `Bearer ${admin}`;
+      return headers;
+    }
+
     function getProjectId() {
       const params = new URLSearchParams(window.location.search);
       const queryId = params.get("id");
@@ -497,7 +506,7 @@
       let lastError;
       for (let attempt = 0; ; attempt++) {
         try {
-          const response = await fetch(url);
+          const response = await fetch(url, { headers: accessHeaders() });
           const raw = await response.text();
           let data = null;
           try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
@@ -569,6 +578,10 @@
           },
         });
 
+        if (result.status === 401) {
+          window.location.href = "/welcome";
+          return;
+        }
         if (!result.ok) {
           throw new Error(result.status === 404 ? "项目不存在。" : "加载项目失败。");
         }

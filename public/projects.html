@@ -342,6 +342,15 @@
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
 
+    function accessHeaders() {
+      const headers = {};
+      const visitor = localStorage.getItem("visitorAccessToken");
+      if (visitor) headers["X-Access-Token"] = visitor;
+      const admin = localStorage.getItem("adminToken");
+      if (admin) headers["Authorization"] = `Bearer ${admin}`;
+      return headers;
+    }
+
     const listEl = document.getElementById("projects-list");
     const toolbar = document.getElementById("toolbar");
     const filtersEl = document.getElementById("filters");
@@ -556,7 +565,7 @@
       try {
         const result = await fetchWithWake(
           `${API_BASE}/api/projects`,
-          {},
+          { headers: accessHeaders() },
           {
             onWaking: (n) => {
               listEl.innerHTML =
@@ -565,6 +574,10 @@
           }
         );
 
+        if (result.status === 401) {
+          window.location.href = "/welcome";
+          return;
+        }
         if (!result.ok) {
           throw new Error("加载项目失败。");
         }

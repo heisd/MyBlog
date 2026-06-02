@@ -92,6 +92,11 @@ const CONTACT_FROM = process.env.CONTACT_FROM || SMTP_USER;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || "MyBlog <onboarding@resend.dev>";
 
+// 访客访问门禁（注册/登录看项目）相关配置。
+const ACCESS_FROM = process.env.ACCESS_FROM || RESEND_FROM;
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -193,7 +198,7 @@ function contactEmailConfigured() {
   return Boolean(RESEND_API_KEY) || Boolean(SMTP_USER && SMTP_PASS);
 }
 
-async function sendContactViaResend({ subject, text, replyTo }) {
+async function sendViaResend({ to, subject, text, replyTo }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
 
@@ -206,7 +211,7 @@ async function sendContactViaResend({ subject, text, replyTo }) {
       },
       body: JSON.stringify({
         from: RESEND_FROM,
-        to: [CONTACT_TO],
+        to: Array.isArray(to) ? to : [to],
         subject,
         text,
         ...(replyTo ? { reply_to: replyTo } : {}),
@@ -226,6 +231,23 @@ async function sendContactViaResend({ subject, text, replyTo }) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// 统一发信入口：优先 Resend（HTTPS），否则回退 SMTP。
+async function sendEmailMessage({ to, subject, text, replyTo }) {
+  if (RESEND_API_KEY) {
+    await sendViaResend({ to, subject, text, replyTo });
+    return;
+  }
+  const transporter = await getMailTransporter();
+  if (!transporter) {
+    throw new Error("Email transport not configured");
+  }
+  await transporter.sendMail({ from: CONTACT_FROM, to, replyTo, subject, text });
+}
+
+function emailConfigured() {
+  return Boolean(RESEND_API_KEY) || Boolean(SMTP_USER && SMTP_PASS);
 }
 
 app.use(
@@ -330,6 +352,170 @@ function requireAdmin(req, res, next) {
   }
   req.adminSession = session;
   return next();
+}
+
+// ===== 访客访问门禁：注册(邮箱+验证码) → 设密码 → 登录；人机验证 + 防刷 =====
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function createVisitorToken(email) {
+  const payload = { type: "visitor", email, exp: Date.now() + 1000 * 60 * 60 * 24 * 14 };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${encoded}.${signTokenPayload(encoded)}`;
+}
+
+function verifyVisitorToken(token) {
+  if (!token) return null;
+  const [encoded, signature] = String(token).split(".");
+  if (!encoded || !signature) return null;
+  if (!constantTimeEqual(signature, signTokenPayload(encoded))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (payload.type !== "visitor" || !payload.email || Number(payload.exp) < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// 项目数据要求「访客已登录」或「管理员」其一。
+function requireVisitor(req, res, next) {
+  const visitor = verifyVisitorToken((req.get("x-access-token") || "").trim());
+  if (visitor) {
+    req.visitor = visitor;
+    return next();
+  }
+  const admin = verifyAdminToken(readBearerToken(req));
+  if (admin) {
+    req.adminSession = admin;
+    return next();
+  }
+  return res.status(401).json({ message: "需要登录后才能查看项目", code: "ACCESS_REQUIRED" });
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  const [salt, hash] = String(stored || "").split(":");
+  if (!salt || !hash) return false;
+  const candidate = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  const a = Buffer.from(candidate, "hex");
+  const b = Buffer.from(hash, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function hashCode(code) {
+  return crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(`code:${code}`).digest("hex");
+}
+
+function generateCode() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+// 内存状态：待验证验证码 + 各类限流计数 + 一次性表单令牌
+const pendingCodes = new Map();
+const codeReqByIp = new Map();
+const codeReqByEmail = new Map();
+const loginByKey = new Map();
+const usedFormTokens = new Map();
+let globalCodeWindow = { start: Date.now(), count: 0 };
+
+const CODE_TTL_MS = 10 * 60 * 1000;
+const CODE_RESEND_COOLDOWN_MS = 60 * 1000;
+const CODE_MAX_ATTEMPTS = 6;
+const CODE_IP_WINDOW_MS = 60 * 60 * 1000;
+const CODE_IP_MAX = 8;
+const CODE_EMAIL_WINDOW_MS = 60 * 60 * 1000;
+const CODE_EMAIL_MAX = 4;
+const GLOBAL_CODE_WINDOW_MS = 60 * 60 * 1000;
+const GLOBAL_CODE_MAX = 80;
+const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_FAIL_MAX = 12;
+
+function hitWindow(map, key, windowMs, max) {
+  const now = Date.now();
+  const entry = map.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    map.set(key, { start: now, count: 1 });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= max;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of pendingCodes) if (now > v.expires) pendingCodes.delete(k);
+  for (const map of [codeReqByIp, codeReqByEmail, loginByKey]) {
+    for (const [k, v] of map) if (now - v.start > 60 * 60 * 1000) map.delete(k);
+  }
+  for (const [k, expiry] of usedFormTokens) if (now > expiry) usedFormTokens.delete(k);
+}, 10 * 60 * 1000).unref();
+
+// 内置人机验证（无 Turnstile 时）：签名表单令牌，含时间陷阱 + 一次性
+function issueFormToken() {
+  const payload = { t: Date.now(), n: crypto.randomBytes(8).toString("hex") };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${encoded}.${signTokenPayload(`form:${encoded}`)}`;
+}
+
+function verifyFormToken(token) {
+  const [encoded, sig] = String(token || "").split(".");
+  if (!encoded || !sig) return false;
+  if (!constantTimeEqual(sig, signTokenPayload(`form:${encoded}`))) return false;
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch {
+    return false;
+  }
+  const age = Date.now() - Number(payload.t || 0);
+  if (age < 2500 || age > 15 * 60 * 1000) return false; // 太快=机器人；太旧=过期
+  if (usedFormTokens.has(token)) return false; // 一次性，防重放
+  usedFormTokens.set(token, Date.now() + 15 * 60 * 1000);
+  return true;
+}
+
+// 人机验证：配了 Turnstile 用 Turnstile，否则用内置（蜜罐 + 表单令牌）
+async function verifyHuman(req) {
+  if (String(req.body?.website || "").trim()) return false; // 蜜罐字段必须为空
+
+  if (TURNSTILE_SECRET_KEY) {
+    const token = String(req.body?.turnstileToken || "");
+    if (!token) return false;
+    try {
+      const params = new URLSearchParams();
+      params.append("secret", TURNSTILE_SECRET_KEY);
+      params.append("response", token);
+      if (req.ip) params.append("remoteip", req.ip);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
+      const data = await resp.json().catch(() => ({}));
+      return Boolean(data.success);
+    } catch {
+      return false;
+    }
+  }
+
+  return verifyFormToken(req.body?.formToken);
+}
+
+async function visitorExists(email) {
+  const { data, error } = await supabase.from("visitors").select("email").eq("email", email).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
 }
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -765,23 +951,7 @@ app.post("/api/contact", contactRateLimit, async (req, res) => {
   const replyTo = email || undefined;
 
   try {
-    // 优先用 Resend（HTTPS），SMTP 仅作为备选（在能用 SMTP 的环境下）。
-    if (RESEND_API_KEY) {
-      await sendContactViaResend({ subject, text: textBody, replyTo });
-    } else {
-      const transporter = await getMailTransporter();
-      if (!transporter) {
-        throw new Error("SMTP transporter unavailable");
-      }
-      await transporter.sendMail({
-        from: CONTACT_FROM,
-        to: CONTACT_TO,
-        replyTo,
-        subject,
-        text: textBody,
-      });
-    }
-
+    await sendEmailMessage({ to: CONTACT_TO, subject, text: textBody, replyTo });
     recordContactSend(req);
     return res.status(201).json({ message: "留言已发送，感谢你的联系！" });
   } catch (error) {
@@ -935,8 +1105,168 @@ app.post("/api/uploads/document", requireAdmin, documentUpload.single("document"
   }
 });
 
+app.get("/api/access/config", (req, res) => {
+  const config = {
+    turnstileSiteKey: TURNSTILE_SITE_KEY || null,
+    emailConfigured: emailConfigured(),
+  };
+  if (!TURNSTILE_SITE_KEY) {
+    config.formToken = issueFormToken();
+  }
+  return res.json(config);
+});
+
+app.get("/api/access/verify", (req, res) => {
+  const visitor = verifyVisitorToken((req.get("x-access-token") || "").trim());
+  if (!visitor) return res.status(401).json({ authenticated: false });
+  return res.json({ authenticated: true, email: visitor.email });
+});
+
+app.post("/api/access/register/request-code", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ message: "请输入有效的邮箱地址。" });
+  }
+  if (!emailConfigured()) {
+    return res.status(503).json({ message: "邮件服务未配置，暂时无法发送验证码。" });
+  }
+
+  const ip = req.ip || "unknown";
+  if (!hitWindow(codeReqByIp, ip, CODE_IP_WINDOW_MS, CODE_IP_MAX)) {
+    return res.status(429).json({ message: "请求过于频繁，请稍后再试。" });
+  }
+  if (!hitWindow(codeReqByEmail, email, CODE_EMAIL_WINDOW_MS, CODE_EMAIL_MAX)) {
+    return res.status(429).json({ message: "该邮箱验证码请求过多，请稍后再试。" });
+  }
+
+  const now = Date.now();
+  if (now - globalCodeWindow.start > GLOBAL_CODE_WINDOW_MS) {
+    globalCodeWindow = { start: now, count: 0 };
+  }
+  if (globalCodeWindow.count >= GLOBAL_CODE_MAX) {
+    return res.status(429).json({ message: "系统繁忙，请稍后再试。" });
+  }
+
+  if (!(await verifyHuman(req))) {
+    return res.status(400).json({ message: "人机验证未通过，请重试。" });
+  }
+
+  const existing = pendingCodes.get(email);
+  if (existing && now - existing.lastSent < CODE_RESEND_COOLDOWN_MS) {
+    return res.status(429).json({ message: "请稍后再请求验证码。" });
+  }
+
+  let exists;
+  try {
+    exists = await visitorExists(email);
+  } catch (error) {
+    console.error("visitorExists failed:", error.message);
+    return res.status(500).json({ message: "服务异常，请稍后再试。" });
+  }
+  if (exists) {
+    return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
+  }
+
+  const code = generateCode();
+  pendingCodes.set(email, { codeHash: hashCode(code), expires: now + CODE_TTL_MS, attempts: 0, lastSent: now });
+  globalCodeWindow.count += 1;
+
+  try {
+    await sendEmailMessage({
+      to: email,
+      subject: "你的注册验证码",
+      text: `你正在注册 Heisd.Stark 博客的项目访问账号。\n\n验证码：${code}\n\n10 分钟内有效。如果不是你本人操作，请忽略本邮件。`,
+    });
+  } catch (error) {
+    console.error("Failed to send access code:", error.message);
+    pendingCodes.delete(email);
+    return res.status(502).json({ message: "验证码发送失败，请稍后再试。" });
+  }
+
+  return res.json({ message: "验证码已发送，请查收邮箱。", cooldown: 60 });
+});
+
+app.post("/api/access/register", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const code = String(req.body?.code || "").trim();
+  const password = String(req.body?.password || "");
+
+  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱格式不正确。" });
+  if (!/^\d{6}$/.test(code)) return res.status(400).json({ message: "验证码格式不正确。" });
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: "密码长度需为 8~128 位。" });
+  }
+
+  const pending = pendingCodes.get(email);
+  if (!pending || Date.now() > pending.expires) {
+    return res.status(400).json({ message: "验证码不存在或已过期，请重新获取。" });
+  }
+  if (pending.attempts >= CODE_MAX_ATTEMPTS) {
+    pendingCodes.delete(email);
+    return res.status(429).json({ message: "尝试次数过多，请重新获取验证码。" });
+  }
+  pending.attempts += 1;
+  if (!constantTimeEqual(hashCode(code), pending.codeHash)) {
+    return res.status(400).json({ message: "验证码不正确。" });
+  }
+
+  try {
+    if (await visitorExists(email)) {
+      pendingCodes.delete(email);
+      return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
+    }
+    const { error } = await supabase.from("visitors").insert({ email, password_hash: hashPassword(password) });
+    if (error) throw error;
+  } catch (error) {
+    console.error("Register failed:", error.message);
+    return res.status(500).json({ message: "注册失败，请稍后再试。" });
+  }
+
+  pendingCodes.delete(email);
+  return res.status(201).json({ token: createVisitorToken(email), email });
+});
+
+app.post("/api/access/login", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || "");
+  if (!isValidEmail(email) || !password) {
+    return res.status(400).json({ message: "请输入邮箱和密码。" });
+  }
+
+  const ip = req.ip || "unknown";
+  const ipOk = hitWindow(loginByKey, `ip:${ip}`, LOGIN_FAIL_WINDOW_MS, LOGIN_FAIL_MAX);
+  const emailOk = hitWindow(loginByKey, `email:${email}`, LOGIN_FAIL_WINDOW_MS, LOGIN_FAIL_MAX);
+  if (!ipOk || !emailOk) {
+    return res.status(429).json({ message: "尝试过于频繁，请稍后再试。" });
+  }
+
+  if (!(await verifyHuman(req))) {
+    return res.status(400).json({ message: "人机验证未通过，请重试。" });
+  }
+
+  let row;
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("email, password_hash")
+      .eq("email", email)
+      .maybeSingle();
+    if (error) throw error;
+    row = data;
+  } catch (error) {
+    console.error("Login query failed:", error.message);
+    return res.status(500).json({ message: "服务异常，请稍后再试。" });
+  }
+
+  if (!row || !verifyPassword(password, row.password_hash)) {
+    return res.status(401).json({ message: "邮箱或密码不正确。" });
+  }
+
+  return res.json({ token: createVisitorToken(email), email });
+});
+
 // 公开列表：仅返回已发布项目，置顶优先，再按日期倒序。
-app.get("/api/projects", async (req, res) => {
+app.get("/api/projects", requireVisitor, async (req, res) => {
   try {
     let { data, error } = await supabase
       .from("projects")
@@ -995,7 +1325,7 @@ app.get("/api/admin/projects", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/projects/:id", async (req, res) => {
+app.get("/api/projects/:id", requireVisitor, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("projects")
