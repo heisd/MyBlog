@@ -262,6 +262,47 @@
       text-align: center;
     }
 
+    main,
+    .footer-note {
+      animation: page-fade-in 750ms ease both;
+    }
+
+    @keyframes page-fade-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    body {
+      transition: opacity 450ms ease;
+    }
+
+    body.leaving {
+      opacity: 0;
+    }
+
+    .countdown {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 22px;
+    }
+
+    .countdown #cd-num {
+      font-weight: 800;
+      color: var(--accent-dark);
+    }
+
+    .countdown button {
+      background: none;
+      border: none;
+      color: var(--accent-dark);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
     @media (max-width: 880px) {
       .cards { grid-template-columns: 1fr; }
     }
@@ -272,6 +313,8 @@
       .button:hover::after { left: -130%; }
       .button-primary { animation: none; }
       .ripple { display: none; }
+      main, .footer-note { animation: none; }
+      body { transition: none; }
     }
   </style>
 </head>
@@ -297,6 +340,10 @@
         <a class="button button-primary" href="/projects">进入项目归档 →</a>
         <a class="button button-secondary" href="/">返回首页</a>
       </div>
+      <p class="countdown" id="countdown">
+        <span id="cd-num">5</span> 秒后自动进入项目归档 ·
+        <button type="button" id="cd-cancel">取消自动跳转</button>
+      </p>
     </section>
 
     <section class="teaser">
@@ -339,6 +386,56 @@
         target.appendChild(ripple);
         ripple.addEventListener("animationend", function () { ripple.remove(); });
       });
+    })();
+
+    (function () {
+      const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const TARGET = "/projects";
+      const cdNum = document.getElementById("cd-num");
+      const cdCancel = document.getElementById("cd-cancel");
+      const countdown = document.getElementById("countdown");
+      let remaining = 5;
+      let tick = null;
+
+      function stopCountdown() {
+        if (tick) { clearInterval(tick); tick = null; }
+      }
+
+      function leaveTo(url) {
+        if (reduce) {
+          window.location.href = url;
+          return;
+        }
+        document.body.classList.add("leaving");
+        setTimeout(function () { window.location.href = url; }, 450);
+      }
+
+      // 英雄区按钮：内部跳转时带整页淡出过渡
+      document.querySelectorAll(".hero-actions a.button").forEach(function (link) {
+        link.addEventListener("click", function (event) {
+          const url = link.getAttribute("href");
+          if (!url || url.charAt(0) === "#") return;
+          event.preventDefault();
+          stopCountdown();
+          leaveTo(url);
+        });
+      });
+
+      cdCancel.addEventListener("click", function () {
+        stopCountdown();
+        countdown.textContent = "已取消自动跳转，点上方「进入项目归档」即可进入。";
+      });
+
+      cdNum.textContent = remaining;
+      tick = setInterval(function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+          stopCountdown();
+          leaveTo(TARGET);
+          return;
+        }
+        cdNum.textContent = remaining;
+      }, 1000);
     })();
   </script>
 </body>
