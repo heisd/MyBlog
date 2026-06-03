@@ -125,8 +125,11 @@ ClaudeAboutWeb/
 
 | 方式 | 触发条件 | 说明 |
 | --- | --- | --- |
-| **Resend HTTP API（推荐）** | 配置了 `RESEND_API_KEY` | 走 HTTPS，**绕过 Render 免费版对 SMTP 端口的封锁**，零成本 |
-| SMTP（备选） | 未配 Resend，但配了 `SMTP_USER`/`SMTP_PASS` | Render **免费实例已封禁出站 SMTP 端口**，需付费实例才可用 |
+| **Brevo HTTP API（最推荐）** | 配置了 `BREVO_API_KEY` | 走 HTTPS；**验证单个发件邮箱即可给任意收件人发信，无需自有域名**，免费 300 封/天 |
+| Resend HTTP API | 未配 Brevo，配了 `RESEND_API_KEY` | 走 HTTPS；免费版**没验证域名时只能发到你自己账号邮箱** |
+| SMTP（备选） | 都没配，但配了 `SMTP_USER`/`SMTP_PASS` | Render **免费实例已封禁出站 SMTP 端口**，需付费实例才可用 |
+
+> **想给任意访客发信（如留言回执、注册验证码）又不想买域名** → 用 **Brevo**：在 [brevo.com](https://www.brevo.com) 注册 → 验证一个发件邮箱（如你的 QQ 邮箱）→ 创建 API Key 填 `BREVO_API_KEY`，并把 `BREVO_SENDER` 设为该验证过的邮箱。优先级：Brevo > Resend > SMTP。
 
 > ⚠️ **重要**：Render 自 2025-09-26 起，免费 Web 服务封禁了出站 SMTP 端口（25/465/587），所以免费实例上 SMTP 一定连接超时。免费方案请用 Resend。
 
@@ -170,6 +173,28 @@ ClaudeAboutWeb/
 - **限流（防号池刷码）**：发码按 **每 IP**、**每邮箱**、**全局**三层限流 + 60s 重发冷却；登录失败按 **IP/邮箱** 限流。
 - 验证码 10 分钟有效、最多尝试 6 次、HMAC 存储不落明文；密码哈希用 scrypt。
 
+### 会员（订阅制）与 AI 助手
+
+- **会员**：访客账号带 `member_until`（到期时间），在未来即为有效会员；**按月订阅**。后台「会员管理」面板可对每个用户「+1 个月」（授予/续费）、「取消会员」（仅去资格、保留账号）或「删除」（彻底移除账号）。
+- **管理员 = 顶级会员**：管理员账号本身拥有全部会员权限（看私有源码、用 AI 助手），无需给自己开通会员。**管理员登录令牌长期有效、不过期**（如需作废全部管理员令牌，更换 `ADMIN_SESSION_SECRET` 即可）。
+- **手动添加会员**：后台支持直接输入邮箱授予会员。若该邮箱**尚未注册**，会先建立一个「待认领」账号（空密码占位）；本人之后用该邮箱注册并设置密码即可登录，已授予的会员有效期保留。
+- **会员特权**：
+  - **站内只读浏览私有仓库源码**：详情页「浏览源码（站内只读）」打开站内文件浏览器，后端用服务端 `GITHUB_TOKEN` 拉取私有仓库的文件树与文件内容（`GET /api/projects/:id/repo/tree`、`/repo/file`，均需会员）。访客**不接触 GitHub、拿不到任何 GitHub 凭证，因此无法 `git clone`**；非会员看到「🔒 仅会员可见」，后端把 `repoUrl` 置空不泄露。
+    - 说明：GitHub 没有「能看不能 clone」的协作者权限，所以采用站内只读浏览而非把人加进仓库。`GITHUB_TOKEN` 需对相关私有仓库有 Contents 读权限。
+  - 使用**悬浮 AI 助手**（右下角 🤖）：`POST /api/assistant/chat`，仅会员/管理员可用，代理到 OpenAI 兼容接口（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`，支持 OpenAI / DeepSeek / Kimi / 智谱 等），带每账号每小时限流。
+- 后台接口：`GET /api/admin/visitors`（列出用户）、`PATCH /api/admin/visitors/:email`（`{extendMonths}` 授予/续费、邮箱不存在时自动建「待认领」账号 / `{revoke:true}` 取消资格）、`DELETE /api/admin/visitors/:email`（删除账号）。
+
+#### 支付与开通（人工收款 + 一键开通）
+
+当前为**人工收款 + 一键开通**的订阅模式（个人微信/支付宝收款码无到账回调，无法纯自动；价格默认 50 元/月，在 `public/welcome.html` 的 `PLANS` 改）：
+
+1. 用户登录后在 `/welcome` 扫收款码付款 → 点「我已付款」。
+2. 后端给管理员邮箱（`CONTACT_TO`）发通知邮件，内含一个**一键开通**链接。
+3. 管理员核对手机确实到账后，点链接 → 打开确认页 → 选 1/3/12 个月 → 即开通（自动写库）。
+
+一键开通链接安全性：HMAC 签名（不可伪造）+ 7 天有效期 + 一次性（防重放）+ 仅发到管理员私人邮箱；令牌只授权「对该邮箱开通」，月数由管理员在确认页选。GET 仅展示确认页、不产生副作用（防邮件预取误触发），实际开通走 POST。相关接口：`GET/POST /api/admin/grant`（凭签名令牌授权，无需登录后台）。
+> 提示：一次性状态存内存，Render 免费实例休眠重启后会重置，理论上 7 天内同一链接可能被再次使用——但链接只在你私人邮箱，风险可忽略。若要更严格可接官方商户支付（微信/支付宝商户、Stripe）实现全自动回调。
+
 ### 前置条件 ⚠️
 
 1. 建表（见 [`data/migration-add-visitors.sql`](data/migration-add-visitors.sql)）：
@@ -177,10 +202,11 @@ ClaudeAboutWeb/
    create table if not exists visitors (
      email text primary key,
      password_hash text not null,
+     member_until timestamptz,
      created_at timestamptz default now()
    );
    ```
-2. **邮件能发到任意访客邮箱**：Resend 免费版**没有验证域名时只能发到你自己账号邮箱**，访客收不到验证码。要让任意人能注册，需在 Resend **验证一个自有域名**，并把 `RESEND_FROM` 改为该域名地址。
+2. **邮件能发到任意访客邮箱**：注册验证码要发到访客自己的邮箱。**最简单的方式是用 Brevo**（见上文「在线留言」一节）——验证一个发件邮箱（如你的 QQ 邮箱）即可给任意人发信，无需域名。（若用 Resend 则需验证自有域名，否则只能发到你自己账号邮箱。）
 
 ## CORS 跨域配置
 
