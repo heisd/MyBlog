@@ -112,6 +112,15 @@
     }
     @keyframes pay-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
     .pay-tip { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.7; }
+    .perks { width: 100%; border-collapse: collapse; font-size: 0.9rem; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .perks th, .perks td { padding: 9px 10px; text-align: center; border-bottom: 1px solid var(--line); }
+    .perks thead th { background: #f7f1e8; color: var(--ink); font-weight: 800; }
+    .perks tbody td:first-child, .perks thead th:first-child { text-align: left; color: var(--ink); }
+    .perks tbody tr:last-child td { border-bottom: none; }
+    .perks .col-vip { background: #fff6ec; }
+    .perks thead .col-vip { color: var(--accent-dark); }
+    .perks .yes { color: #2f6b30; font-weight: 800; }
+    .perks .no { color: #b9aea2; }
     .plans { display: flex; gap: 10px; flex-wrap: wrap; }
     .plan {
       flex: 1 1 96px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px;
@@ -219,11 +228,23 @@
       <div class="pay-panel" id="pay-panel" hidden>
         <button type="button" class="pay-toggle" id="pay-toggle">⭐ 开通 / 续费会员</button>
         <div class="pay-body" id="pay-body" hidden>
-          <p class="pay-tip">会员可<strong>站内浏览私有仓库源码</strong>、使用<strong>AI 助手</strong>。扫码付款后点下方「我已付款」，管理员核对后为你开通。</p>
+          <p class="pay-tip">开通会员即可解锁下列权益。扫码付款后点「我已付款」，管理员核对到账后为你开通。</p>
+
+          <table class="perks">
+            <thead><tr><th>权益</th><th>普通用户</th><th class="col-vip">会员</th></tr></thead>
+            <tbody>
+              <tr><td>浏览项目归档</td><td class="yes">✓</td><td class="yes col-vip">✓</td></tr>
+              <tr><td>查看项目正文 / 演示视频</td><td class="yes">✓</td><td class="yes col-vip">✓</td></tr>
+              <tr><td>站内只读浏览私有仓库源码</td><td class="no">—</td><td class="yes col-vip">✓</td></tr>
+              <tr><td>悬浮 AI 助手</td><td class="no">—</td><td class="yes col-vip">✓</td></tr>
+              <tr><td>优先解答 / 后续新功能</td><td class="no">—</td><td class="yes col-vip">✓</td></tr>
+            </tbody>
+          </table>
+
           <div class="plans" id="plans"></div>
           <div class="qr-row" id="qr-row">
-            <figure class="qr" data-qr><img src="/assets/pay-wechat.png" alt="微信收款码" /><figcaption>微信扫码</figcaption></figure>
-            <figure class="qr" data-qr><img src="/assets/pay-alipay.png" alt="支付宝收款码" /><figcaption>支付宝扫码</figcaption></figure>
+            <figure class="qr" data-qr><img id="qr-wechat" alt="微信收款码" /><figcaption id="cap-wechat">微信扫码</figcaption></figure>
+            <figure class="qr" data-qr><img id="qr-alipay" alt="支付宝收款码" /><figcaption id="cap-alipay">支付宝扫码</figcaption></figure>
           </div>
           <p class="qr-empty" id="qr-empty" hidden>收款码尚未配置。请联系管理员获取付款方式。</p>
           <p class="pay-note">付款时请在备注里填写你的登录邮箱，便于核对。</p>
@@ -240,12 +261,16 @@
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
     const TOKEN_KEY = "visitorAccessToken";
-    // 会员套餐与价格（按需修改：months = 月数，price = 展示价格）。
+    // 会员套餐与价格（按需修改）。
+    //  months = 月数；price = 展示价格；
+    //  wechat / alipay = 该套餐「固定金额收款码」图片路径（放在 public/assets/）。
+    //  没放固定金额码时会自动回退到通用码 pay-wechat.png / pay-alipay.png（需对方手动输金额）。
     const PLANS = [
-      { months: 1, price: "¥50" },
-      { months: 3, price: "¥150" },
-      { months: 12, price: "¥600" },
+      { months: 1,  price: "¥50",  wechat: "/assets/pay-wechat-50.png",  alipay: "/assets/pay-alipay-50.png" },
+      { months: 3,  price: "¥150", wechat: "/assets/pay-wechat-150.png", alipay: "/assets/pay-alipay-150.png" },
+      { months: 12, price: "¥600", wechat: "/assets/pay-wechat-600.png", alipay: "/assets/pay-alipay-600.png" },
     ];
+    const QR_FALLBACK = { wechat: "/assets/pay-wechat.png", alipay: "/assets/pay-alipay.png" };
     let selectedPlan = PLANS[0];
 
     const gate = document.getElementById("gate");
@@ -438,7 +463,7 @@
           const until = data.memberUntil ? new Date(data.memberUntil).toLocaleDateString("zh-CN") : "";
           who += `　·　会员${until ? `（${until} 到期）` : ""}`;
         } else {
-          who += "　·　普通用户（会员可看私有仓库 + AI 助手）";
+          who += "　·　普通用户（开通会员可看私有仓库源码 + AI 助手）";
         }
         document.getElementById("who").textContent = who;
         setupPayPanel(Boolean(data.member));
@@ -468,20 +493,40 @@
           plansEl.querySelectorAll(".plan").forEach((n) => n.classList.remove("active"));
           el.classList.add("active");
           selectedPlan = PLANS[Number(el.dataset.i)] || PLANS[0];
-        });
-        // 收款码加载失败则隐藏；全部失败则提示未配置。
-        document.querySelectorAll("#qr-row [data-qr] img").forEach((img) => {
-          img.addEventListener("error", () => {
-            img.closest("[data-qr]").hidden = true;
-            const left = document.querySelectorAll("#qr-row [data-qr]:not([hidden])").length;
-            if (!left) {
-              document.getElementById("qr-row").hidden = true;
-              document.getElementById("qr-empty").hidden = false;
-            }
-          });
+          updateQRs();
         });
         plansEl.dataset.ready = "1";
+        updateQRs();
       }
+    }
+
+    // 按所选套餐显示对应的「固定金额收款码」；图片缺失时回退到通用码，再缺失则隐藏。
+    function applyQR(imgId, capId, label, primary, fallback) {
+      const img = document.getElementById(imgId);
+      const fig = img.closest("[data-qr]");
+      document.getElementById(capId).textContent = `${label} · ${selectedPlan.price}`;
+      fig.hidden = false;
+      img.onerror = () => {
+        if (img.dataset.fb !== "1" && fallback) {
+          img.dataset.fb = "1";
+          img.src = fallback;
+        } else {
+          fig.hidden = true;
+          refreshQrEmpty();
+        }
+      };
+      img.dataset.fb = "";
+      img.src = primary || fallback || "";
+      refreshQrEmpty();
+    }
+    function refreshQrEmpty() {
+      const left = document.querySelectorAll("#qr-row [data-qr]:not([hidden])").length;
+      document.getElementById("qr-row").hidden = left === 0;
+      document.getElementById("qr-empty").hidden = left !== 0;
+    }
+    function updateQRs() {
+      applyQR("qr-wechat", "cap-wechat", "微信扫码", selectedPlan.wechat, QR_FALLBACK.wechat);
+      applyQR("qr-alipay", "cap-alipay", "支付宝扫码", selectedPlan.alipay, QR_FALLBACK.alipay);
     }
 
     function setPayMsg(text, type = "") {
