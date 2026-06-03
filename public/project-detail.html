@@ -162,6 +162,13 @@
       margin-bottom: 30px;
     }
     .repo-locked strong { color: var(--accent-dark); }
+    .repo-cta {
+      display: inline-flex; align-items: center; gap: 6px; margin-left: 10px;
+      padding: 8px 16px; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 0.92rem;
+      background: linear-gradient(135deg, #cc6a2d, #8e4317); color: #fff;
+      box-shadow: 0 8px 20px rgba(204,106,45,.36); transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .repo-cta:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 26px rgba(204,106,45,.46); }
     .cv-overlay {
       position: fixed; inset: 0; z-index: 60;
       background: rgba(15, 23, 42, 0.5);
@@ -615,7 +622,7 @@
         </button></div>`;
       }
       if (project.repoLocked) {
-        return `<div class="repo-locked">🔒 该项目源码仓库为私有，仅 <strong>会员</strong> 可见。</div>`;
+        return `<div class="repo-locked">🔒 该项目源码仓库为私有，仅 <strong>会员</strong> 可见。<a class="repo-cta" href="/welcome">⭐ 去开通会员 →</a></div>`;
       }
       return "";
     }
