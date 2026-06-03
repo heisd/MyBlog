@@ -596,10 +596,12 @@ async function verifyHuman(req) {
   return verifyFormToken(req.body?.formToken);
 }
 
-async function visitorExists(email) {
-  const { data, error } = await supabase.from("visitors").select("email").eq("email", email).maybeSingle();
+// 是否为「已设密码」的真实注册用户。管理员手动添加的「待认领」会员（空密码占位）不算已注册，
+// 以便本人后续用该邮箱注册、认领账号并设置密码（保留会员有效期）。
+async function visitorIsRegistered(email) {
+  const { data, error } = await supabase.from("visitors").select("password_hash").eq("email", email).maybeSingle();
   if (error) throw error;
-  return Boolean(data);
+  return Boolean(data && data.password_hash);
 }
 
 // 会员判定（订阅制）：member_until 在未来则为有效会员（列未迁移时按非会员处理）。
@@ -1382,14 +1384,15 @@ app.post("/api/access/register/request-code", async (req, res) => {
     return res.status(429).json({ message: "请稍后再请求验证码。" });
   }
 
-  let exists;
+  // 只拦截「已设密码」的真实注册用户；管理员手动添加的「待认领」账号（空密码占位）允许发码以便本人注册认领。
+  let registered;
   try {
-    exists = await visitorExists(email);
+    registered = await visitorIsRegistered(email);
   } catch (error) {
-    console.error("visitorExists failed:", error.message);
+    console.error("visitor lookup failed:", error.message);
     return res.status(500).json({ message: "服务异常，请稍后再试。" });
   }
-  if (exists) {
+  if (registered) {
     return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
   }
 
@@ -1637,11 +1640,13 @@ app.post("/api/admin/grant", async (req, res) => {
   if (usedGrantTokens.has(token)) {
     return res.status(409).json({ ok: false, message: "该链接已使用过。如需再次开通，请到后台「会员管理」手动操作。" });
   }
+  // 先抢占标记（防并发重复开通），失败再回滚以便重试。
+  usedGrantTokens.set(token, Number(payload.exp) || Date.now() + 7 * 24 * 60 * 60 * 1000);
   try {
     const result = await grantMembershipMonths(payload.email, months);
-    usedGrantTokens.set(token, Number(payload.exp) || Date.now() + 7 * 24 * 60 * 60 * 1000);
     return res.json({ ok: true, months, ...result });
   } catch (error) {
+    usedGrantTokens.delete(token);
     if (error.code === "MIGRATION_REQUIRED") {
       return res.status(409).json({ ok: false, message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
     }
