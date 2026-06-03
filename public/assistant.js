@@ -44,6 +44,10 @@
     .ai-send:disabled{opacity:.55;cursor:not-allowed;}
     .ai-locked{padding:22px;text-align:center;color:#6b625b;line-height:1.8;}
     .ai-locked a{color:#8e4317;font-weight:700;}
+    .ai-cta{display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:11px 20px;border-radius:999px;
+      background:linear-gradient(135deg,#cc6a2d,#8e4317);color:#fff !important;text-decoration:none;font-weight:700;
+      box-shadow:0 10px 24px rgba(204,106,45,.4);transition:transform 160ms ease,box-shadow 160ms ease;}
+    .ai-cta:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 14px 30px rgba(204,106,45,.5);}
     @media (prefers-reduced-motion: reduce){.ai-fab{transition:none}.ai-panel.open{animation:none}}
   `;
   document.head.appendChild(style);
@@ -97,7 +101,8 @@
 
   function showLocked() {
     body.innerHTML =
-      '<div class="ai-locked">🔒 AI 助手是<strong>会员专享</strong>功能。<br>开通会员后即可使用，并可查看项目的私有 GitHub 仓库。<br><br>如需开通，请通过 <a href="/contact">联系我</a> 申请。</div>';
+      '<div class="ai-locked">🔒 AI 助手是<strong>会员专享</strong>功能。<br>开通会员后即可使用，并可<strong>站内浏览私有仓库源码</strong>。<br>扫码付款 → 点「我已付款」→ 管理员核对后开通。' +
+      '<br><a class="ai-cta" href="/welcome">⭐ 去开通会员 →</a></div>';
     input.disabled = true;
     sendBtn.disabled = true;
   }
