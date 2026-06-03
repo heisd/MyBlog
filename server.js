@@ -107,6 +107,9 @@ const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
 const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 
+// 站内只读源码浏览（会员专享）：用服务端 GitHub Token 拉取私有仓库内容，访客不接触 GitHub。
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
+
 if (
   !SUPABASE_URL ||
   !SUPABASE_SERVICE_ROLE_KEY ||
@@ -609,6 +612,63 @@ function gateRepo(item, allowed) {
   if (allowed) return { ...item, repoLocked: false };
   return { ...item, repoUrl: null, repoLocked: Boolean(item.repoUrl) };
 }
+
+// ===== 站内只读源码浏览（会员专享）=====
+
+// 会员中间件：登录 + 有效会员（或管理员）才放行。
+function requireMember(req, res, next) {
+  const visitor = verifyVisitorToken((req.get("x-access-token") || "").trim());
+  const admin = verifyAdminToken(readBearerToken(req));
+  if (!visitor && !admin) {
+    return res.status(401).json({ message: "需要登录后才能查看", code: "ACCESS_REQUIRED" });
+  }
+  if (admin) {
+    req.adminSession = admin;
+    return next();
+  }
+  req.visitor = visitor;
+  visitorIsMember(visitor.email)
+    .then((isMember) => {
+      if (!isMember) return res.status(403).json({ message: "源码浏览为会员专享功能。", code: "MEMBER_ONLY" });
+      return next();
+    })
+    .catch(() => res.status(500).json({ message: "服务异常，请稍后再试。" }));
+}
+
+function parseGitHubRepo(url) {
+  const match = /github\.com[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i.exec(String(url || ""));
+  if (!match) return null;
+  return { owner: match[1], repo: match[2] };
+}
+
+async function getProjectRepo(id) {
+  const { data, error } = await supabase.from("projects").select("repoUrl").eq("id", id).maybeSingle();
+  if (error) {
+    if (isMissingColumn(error)) return null;
+    throw error;
+  }
+  return data && data.repoUrl ? parseGitHubRepo(data.repoUrl) : null;
+}
+
+async function githubApi(path, { raw = false } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    return await fetch(`https://api.github.com${path}`, {
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: raw ? "application/vnd.github.raw" : "application/vnd.github+json",
+        "User-Agent": "Heisd-Blog",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const repoTreeCache = new Map();
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 10;
@@ -1482,6 +1542,106 @@ app.post("/api/assistant/chat", requireVisitor, async (req, res) => {
   } catch (error) {
     console.error("Assistant failed:", error.message);
     return res.status(502).json({ message: "AI 助手暂时不可用，请稍后再试。" });
+  }
+});
+
+// 源码浏览（会员专享）：项目私有仓库的文件树
+app.get("/api/projects/:id/repo/tree", requireMember, async (req, res) => {
+  if (!GITHUB_TOKEN) {
+    return res.status(503).json({ message: "源码浏览尚未配置（缺少 GitHub Token）。" });
+  }
+  let repo;
+  try {
+    repo = await getProjectRepo(req.params.id);
+  } catch (error) {
+    console.error("getProjectRepo failed:", error.message);
+    return res.status(500).json({ message: "读取项目失败。" });
+  }
+  if (!repo) {
+    return res.status(404).json({ message: "该项目未设置 GitHub 仓库链接。" });
+  }
+
+  const cacheKey = `${repo.owner}/${repo.repo}`;
+  const cached = repoTreeCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return res.json(cached.value);
+  }
+
+  try {
+    const metaResp = await githubApi(`/repos/${repo.owner}/${repo.repo}`);
+    if (!metaResp.ok) {
+      return res
+        .status(metaResp.status === 404 ? 404 : 502)
+        .json({ message: "无法访问该仓库，请检查仓库地址与 GitHub Token 权限。" });
+    }
+    const meta = await metaResp.json();
+    const branch = meta.default_branch || "main";
+
+    const treeResp = await githubApi(
+      `/repos/${repo.owner}/${repo.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+    );
+    if (!treeResp.ok) {
+      return res.status(502).json({ message: "读取文件树失败。" });
+    }
+    const treeData = await treeResp.json();
+    const entries = (treeData.tree || [])
+      .filter((e) => e && e.path && (e.type === "blob" || e.type === "tree"))
+      .slice(0, 4000)
+      .map((e) => ({ path: e.path, type: e.type === "tree" ? "dir" : "file", size: e.size || 0 }));
+
+    const value = { repo: cacheKey, branch, truncated: Boolean(treeData.truncated), entries };
+    repoTreeCache.set(cacheKey, { value, expires: Date.now() + 5 * 60 * 1000 });
+    return res.json(value);
+  } catch (error) {
+    console.error("repo tree failed:", error.message);
+    return res.status(502).json({ message: "读取仓库失败，请稍后再试。" });
+  }
+});
+
+// 源码浏览（会员专享）：单个文件内容（只读，不提供下载）
+app.get("/api/projects/:id/repo/file", requireMember, async (req, res) => {
+  if (!GITHUB_TOKEN) {
+    return res.status(503).json({ message: "源码浏览尚未配置（缺少 GitHub Token）。" });
+  }
+  const path = String(req.query.path || "").replace(/^\/+/, "");
+  if (!path || path.includes("..")) {
+    return res.status(400).json({ message: "路径不合法。" });
+  }
+  let repo;
+  try {
+    repo = await getProjectRepo(req.params.id);
+  } catch (error) {
+    return res.status(500).json({ message: "读取项目失败。" });
+  }
+  if (!repo) {
+    return res.status(404).json({ message: "该项目未设置 GitHub 仓库链接。" });
+  }
+
+  try {
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    const resp = await githubApi(`/repos/${repo.owner}/${repo.repo}/contents/${encodedPath}`);
+    if (!resp.ok) {
+      return res.status(resp.status === 404 ? 404 : 502).json({ message: "读取文件失败。" });
+    }
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      return res.status(400).json({ message: "这是一个目录。" });
+    }
+    const size = data.size || 0;
+    if (size > 400 * 1024) {
+      return res.json({ path, tooLarge: true, size });
+    }
+    let content = "";
+    if (data.encoding === "base64" && data.content) {
+      content = Buffer.from(data.content, "base64").toString("utf8");
+    }
+    if (content.includes("\u0000")) {
+      return res.json({ path, binary: true, size });
+    }
+    return res.json({ path, content, size });
+  } catch (error) {
+    console.error("repo file failed:", error.message);
+    return res.status(502).json({ message: "读取文件失败，请稍后再试。" });
   }
 });
 

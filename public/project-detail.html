@@ -162,6 +162,44 @@
       margin-bottom: 30px;
     }
     .repo-locked strong { color: var(--accent-dark); }
+    .cv-overlay {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(15, 23, 42, 0.5);
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .cv-overlay.open { display: flex; }
+    .cv {
+      width: min(1000px, 96vw); height: min(82vh, 760px);
+      background: #fffdf8; border: 1px solid var(--line); border-radius: 18px;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.35);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .cv-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgba(204,106,45,.06); }
+    .cv-head b { color: var(--accent-dark); }
+    .cv-note { color: var(--muted); font-size: .82rem; }
+    .cv-close { margin-left: auto; border: none; background: none; font-size: 24px; line-height: 1; color: var(--muted); cursor: pointer; }
+    .cv-main { flex: 1; display: grid; grid-template-columns: 280px 1fr; min-height: 0; }
+    .cv-side { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: #f8f4ed; }
+    .cv-side input { margin: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: #fffefb; }
+    .cv-side input:focus { outline: none; border-color: var(--accent); }
+    .cv-files { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+    .cv-file {
+      display: block; width: 100%; text-align: left; border: none; background: none;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer; font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .82rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      direction: rtl;
+    }
+    .cv-file:hover { background: rgba(204,106,45,.08); }
+    .cv-file.active { background: rgba(204,106,45,.16); color: var(--accent-dark); font-weight: 700; }
+    .cv-content { display: flex; flex-direction: column; min-height: 0; }
+    .cv-path { padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cv-code { flex: 1; margin: 0; overflow: auto; padding: 16px; background: #2b2722; color: #f4efe7; font-family: "SFMono-Regular", Consolas, monospace; font-size: .86rem; line-height: 1.6; white-space: pre; }
+    .cv-loading { color: var(--muted); padding: 16px; font-size: .9rem; }
+    @media (max-width: 720px) {
+      .cv-main { grid-template-columns: 1fr; grid-template-rows: 38% 62%; }
+      .cv-side { border-right: none; border-bottom: 1px solid var(--line); }
+      .cv-file { direction: ltr; }
+    }
     @media (prefers-reduced-motion: reduce) {
       .repo-link { transition: none; }
       .repo-link:hover { transform: none; }
@@ -447,6 +485,27 @@
   <aside class="toc-panel" id="toc-panel" aria-label="目录"></aside>
   <button class="toc-fab" id="toc-fab" type="button" aria-label="打开目录">☰ 目录</button>
   <div class="toc-backdrop" id="toc-backdrop"></div>
+
+  <div class="cv-overlay" id="cv-overlay">
+    <div class="cv">
+      <div class="cv-head">
+        <b id="cv-title">源码浏览</b>
+        <span class="cv-note">只读 · 不支持下载 / clone</span>
+        <button class="cv-close" id="cv-close" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="cv-main">
+        <div class="cv-side">
+          <input id="cv-filter" type="text" placeholder="筛选文件…" autocomplete="off">
+          <div class="cv-files" id="cv-files"></div>
+        </div>
+        <div class="cv-content">
+          <div class="cv-path" id="cv-path">← 从左侧选择一个文件查看</div>
+          <pre class="cv-code" id="cv-code"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">Heisd.Stark</a>
@@ -550,11 +609,10 @@
 
     function renderRepo(project) {
       if (project.repoUrl) {
-        const safeUrl = escapeHtml(project.repoUrl);
-        return `<div><a class="repo-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+        return `<div><button type="button" class="repo-link" id="browse-source">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-          在 GitHub 查看源码
-        </a></div>`;
+          浏览源码（站内只读）
+        </button></div>`;
       }
       if (project.repoLocked) {
         return `<div class="repo-locked">🔒 该项目源码仓库为私有，仅 <strong>会员</strong> 可见。</div>`;
@@ -622,6 +680,9 @@
         `;
         buildToc();
         setupPager(project.id);
+        currentProjectId = project.id;
+        const browseBtn = document.getElementById("browse-source");
+        if (browseBtn) browseBtn.addEventListener("click", () => openCodeViewer(project.id));
       } catch (error) {
         root.className = "state";
         root.textContent = error.message;
@@ -757,7 +818,7 @@
     }
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeDrawer();
+      if (event.key === "Escape") { closeDrawer(); cvClose(); }
       if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
       if (event.key === "ArrowLeft" && prevUrl) leaveTo(prevUrl);
       if (event.key === "ArrowRight" && nextUrl) leaveTo(nextUrl);
@@ -767,6 +828,73 @@
       event.preventDefault();
       leaveTo(event.currentTarget.getAttribute("href"));
     });
+
+    // ---- 站内只读源码浏览 ----
+    let currentProjectId = null;
+    let cvFiles = [];
+    let cvTreeLoaded = false;
+    const cvOverlay = document.getElementById("cv-overlay");
+    const cvFilesEl = document.getElementById("cv-files");
+    const cvFilterEl = document.getElementById("cv-filter");
+    const cvCodeEl = document.getElementById("cv-code");
+    const cvPathEl = document.getElementById("cv-path");
+    const cvTitleEl = document.getElementById("cv-title");
+
+    function cvClose() { cvOverlay.classList.remove("open"); }
+
+    function renderCvFileList(filter) {
+      const f = (filter || "").toLowerCase();
+      const list = cvFiles.filter((p) => !f || p.toLowerCase().includes(f)).slice(0, 2000);
+      cvFilesEl.innerHTML = list.length
+        ? list.map((p) => `<button type="button" class="cv-file" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")
+        : "<div class='cv-loading'>无匹配文件</div>";
+    }
+
+    async function openCodeViewer(id) {
+      cvOverlay.classList.add("open");
+      if (cvTreeLoaded) return;
+      cvFilesEl.innerHTML = "<div class='cv-loading'>正在加载文件树…</div>";
+      try {
+        const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}/repo/tree`, { headers: accessHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (!res.ok) { cvFilesEl.innerHTML = `<div class='cv-loading'>${escapeHtml(data.message || "加载失败")}</div>`; return; }
+        cvTitleEl.textContent = data.repo || "源码浏览";
+        cvFiles = (data.entries || []).filter((e) => e.type === "file").map((e) => e.path).sort();
+        cvTreeLoaded = true;
+        renderCvFileList("");
+      } catch {
+        cvFilesEl.innerHTML = "<div class='cv-loading'>网络异常，请稍后再试。</div>";
+      }
+    }
+
+    cvFilterEl.addEventListener("input", () => renderCvFileList(cvFilterEl.value.trim()));
+    cvFilesEl.addEventListener("click", async (event) => {
+      const btn = event.target.closest(".cv-file");
+      if (!btn) return;
+      cvFilesEl.querySelectorAll(".cv-file.active").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const path = btn.dataset.path;
+      cvPathEl.textContent = path;
+      cvCodeEl.textContent = "加载中…";
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/projects/${encodeURIComponent(currentProjectId)}/repo/file?path=${encodeURIComponent(path)}`,
+          { headers: accessHeaders() }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (!res.ok) { cvCodeEl.textContent = data.message || "读取失败"; return; }
+        if (data.tooLarge) { cvCodeEl.textContent = `（文件过大，约 ${Math.round((data.size || 0) / 1024)} KB，未显示）`; return; }
+        if (data.binary) { cvCodeEl.textContent = "（二进制文件，无法预览）"; return; }
+        cvCodeEl.textContent = data.content || "（空文件）";
+        cvCodeEl.scrollTop = 0;
+      } catch {
+        cvCodeEl.textContent = "网络异常，请稍后再试。";
+      }
+    });
+    document.getElementById("cv-close").addEventListener("click", cvClose);
+    cvOverlay.addEventListener("click", (event) => { if (event.target === cvOverlay) cvClose(); });
 
     loadProject();
   </script>
