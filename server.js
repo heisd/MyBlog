@@ -485,6 +485,7 @@ const codeReqByIp = new Map();
 const codeReqByEmail = new Map();
 const loginByKey = new Map();
 const usedFormTokens = new Map();
+const usedGrantTokens = new Map();
 const assistantByEmail = new Map();
 let globalCodeWindow = { start: Date.now(), count: 0 };
 
@@ -518,6 +519,7 @@ setInterval(() => {
     for (const [k, v] of map) if (now - v.start > 60 * 60 * 1000) map.delete(k);
   }
   for (const [k, expiry] of usedFormTokens) if (now > expiry) usedFormTokens.delete(k);
+  for (const [k, expiry] of usedGrantTokens) if (now > expiry) usedGrantTokens.delete(k);
 }, 10 * 60 * 1000).unref();
 
 // 内置人机验证（无 Turnstile 时）：签名表单令牌，含时间陷阱 + 一次性
@@ -542,6 +544,26 @@ function verifyFormToken(token) {
   if (usedFormTokens.has(token)) return false; // 一次性，防重放
   usedFormTokens.set(token, Date.now() + 15 * 60 * 1000);
   return true;
+}
+
+// 一键开通令牌：用户点「我已付款」后，邮件给管理员私人邮箱发一个签名链接，管理员核对到账后点击即开通。
+// 安全：HMAC 签名（不可伪造）+ 7 天有效期 + 一次性（防重放）+ 只发到管理员邮箱。令牌仅授权「对该邮箱开通」，月数由管理员在确认页选择。
+function signGrantToken(email, plan) {
+  const payload = { t: "grant", email, plan: String(plan || "").slice(0, 60), exp: Date.now() + 7 * 24 * 60 * 60 * 1000, n: crypto.randomBytes(8).toString("hex") };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${encoded}.${signTokenPayload(`grant:${encoded}`)}`;
+}
+function verifyGrantToken(token) {
+  const [encoded, sig] = String(token || "").split(".");
+  if (!encoded || !sig) return null;
+  if (!constantTimeEqual(sig, signTokenPayload(`grant:${encoded}`))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (payload.t !== "grant" || !payload.email || Number(payload.exp) < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 // 人机验证：配了 Turnstile 用 Turnstile，否则用内置（蜜罐 + 表单令牌）
@@ -603,6 +625,51 @@ async function getMemberInfo(email) {
 
 async function visitorIsMember(email) {
   return (await getMemberInfo(email)).member;
+}
+
+// 授予/续费会员 months 个月（在现有有效期基础上叠加）。账号不存在则用空密码占位创建（手动添加会员，本人后续注册认领）。
+// 列未迁移时抛出 code=MIGRATION_REQUIRED。
+async function grantMembershipMonths(email, months) {
+  months = Math.max(1, Math.min(24, Number(months) || 1));
+  const { data: existing, error: e1 } = await supabase
+    .from("visitors")
+    .select("email, member_until")
+    .eq("email", email)
+    .maybeSingle();
+  if (e1) {
+    if (isMissingColumn(e1)) { const err = new Error("MIGRATION_REQUIRED"); err.code = "MIGRATION_REQUIRED"; throw err; }
+    throw e1;
+  }
+  let base = Date.now();
+  if (existing && existing.member_until && new Date(existing.member_until).getTime() > base) {
+    base = new Date(existing.member_until).getTime();
+  }
+  const memberUntil = new Date(base + months * 30 * 24 * 60 * 60 * 1000).toISOString();
+  let data, error;
+  if (existing) {
+    ({ data, error } = await supabase
+      .from("visitors")
+      .update({ member_until: memberUntil })
+      .eq("email", email)
+      .select("email, member_until")
+      .maybeSingle());
+  } else {
+    ({ data, error } = await supabase
+      .from("visitors")
+      .insert({ email, password_hash: "", member_until: memberUntil })
+      .select("email, member_until")
+      .maybeSingle());
+  }
+  if (error) {
+    if (isMissingColumn(error)) { const err = new Error("MIGRATION_REQUIRED"); err.code = "MIGRATION_REQUIRED"; throw err; }
+    throw error;
+  }
+  return {
+    email: data.email,
+    memberUntil: data.member_until,
+    member: data.member_until ? new Date(data.member_until).getTime() > Date.now() : false,
+    pending: !existing,
+  };
 }
 
 // 该请求能否看到私有仓库链接：管理员可见，或访客为会员。
@@ -1456,16 +1523,27 @@ app.post("/api/access/payment-notify", requireVisitor, async (req, res) => {
     return res.status(503).json({ message: "暂未配置通知邮箱，请直接联系管理员开通。", fallbackEmail: CONTACT_TO });
   }
 
+  // 仅对真实访客邮箱生成「一键开通」链接（管理员自测时不需要）。
+  const baseUrl = process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+  const grantLink = req.visitor
+    ? `${baseUrl}/api/admin/grant?token=${encodeURIComponent(signGrantToken(req.visitor.email, plan))}`
+    : "";
+
   const lines = [
-    "有用户报告已完成会员付款，请到后台「会员管理」为其开通 / 续费。",
+    "有用户报告已完成会员付款。请先在微信/支付宝核对是否收到对应金额，再开通。",
     "",
     `账号邮箱：${email}`,
     `选择套餐：${plan || "（未填写）"}`,
     `用户备注：${note || "（无）"}`,
     `提交时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
     "",
-    "操作：打开 /admin → 会员管理 → 给该邮箱「+N 个月」。若用户尚未注册，可直接「手动添加会员」。",
   ];
+  if (grantLink) {
+    lines.push("✅ 确认收到钱后，点下面这个「一键开通」链接（可选 1/3/12 个月，7 天内有效、一次性）：");
+    lines.push(grantLink);
+    lines.push("");
+  }
+  lines.push("或手动操作：打开 /admin → 会员管理 → 给该邮箱「+N 个月」。若用户尚未注册，可直接「手动添加会员」。");
 
   try {
     await sendEmailMessage({
@@ -1478,6 +1556,97 @@ app.post("/api/access/payment-notify", requireVisitor, async (req, res) => {
   } catch (error) {
     console.error("Payment notify failed:", error.message);
     return res.status(502).json({ message: "通知发送失败，请稍后再试或直接联系管理员。", fallbackEmail: CONTACT_TO });
+  }
+});
+
+// 一键开通：确认页（管理员从邮件点开）。令牌即授权，无需登录后台。GET 不产生副作用，避免邮件预取误触发。
+function grantHtmlPage(title, inner) {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+<style>
+  :root{--accent:#cc6a2d;--accent-dark:#8e4317;--ink:#2b241d;--muted:#6b625b;--line:#e5dbcf;}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:linear-gradient(180deg,#f8f4ed,#f4efe7);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+  .card{width:100%;max-width:440px;background:#fffdfa;border:1px solid var(--line);border-radius:18px;
+    box-shadow:0 24px 60px rgba(68,48,30,.16);padding:28px;}
+  h1{margin:0 0 6px;font-size:1.3rem;color:var(--accent-dark);}
+  .sub{color:var(--muted);font-size:.92rem;line-height:1.7;margin:0 0 18px;}
+  .kv{background:#f8f4ed;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 18px;font-size:.95rem;line-height:1.9;word-break:break-all;}
+  .kv b{color:var(--accent-dark);}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;}
+  .btns button{flex:1 1 120px;padding:13px 14px;border:none;border-radius:12px;cursor:pointer;font:inherit;font-weight:800;
+    color:#fff;background:linear-gradient(135deg,#cc6a2d,#8e4317);box-shadow:0 10px 24px rgba(204,106,45,.36);
+    transition:transform 150ms ease,box-shadow 150ms ease,opacity 150ms ease;}
+  .btns button:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(204,106,45,.46);}
+  .btns button:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;}
+  .note{margin:16px 0 0;font-size:.84rem;color:var(--muted);line-height:1.7;}
+  .ok{color:#2f6b30;font-weight:800;}
+  .err{color:#b3271e;font-weight:800;}
+  #msg{margin-top:16px;font-size:.95rem;line-height:1.7;min-height:1.2em;}
+</style></head><body><div class="card">${inner}</div></body></html>`;
+}
+
+app.get("/api/admin/grant", (req, res) => {
+  const token = String(req.query.token || "");
+  const payload = verifyGrantToken(token);
+  res.set("Content-Type", "text/html; charset=utf-8");
+  if (!payload) {
+    return res.status(400).send(grantHtmlPage("链接无效", `<h1>链接无效或已过期</h1>
+      <p class="sub">这个一键开通链接无法识别，可能已过期（7 天）、已被使用，或被改动过。<br>请到后台「会员管理」手动为该用户开通。</p>`));
+  }
+  const email = escapeHtmlText(payload.email);
+  const plan = escapeHtmlText(payload.plan || "未填写");
+  return res.send(grantHtmlPage("确认开通会员", `
+    <h1>确认开通会员</h1>
+    <p class="sub">请先确认你已在<strong>微信 / 支付宝收到对应金额</strong>，再选择开通时长。</p>
+    <div class="kv"><b>付款用户：</b>${email}<br><b>用户选择：</b>${plan}</div>
+    <p class="sub" style="margin-bottom:10px;">为该用户开通：</p>
+    <div class="btns">
+      <button data-m="1">开通 1 个月</button>
+      <button data-m="3">开通 3 个月</button>
+      <button data-m="12">开通 12 个月</button>
+    </div>
+    <div id="msg"></div>
+    <p class="note">链接 7 天内有效、一次性。开通后会在现有有效期上叠加。若金额不符，请勿点击，改用后台手动操作。</p>
+    <script>
+      var token=${JSON.stringify(token)};
+      var btns=document.querySelectorAll('.btns button');
+      var msg=document.getElementById('msg');
+      btns.forEach(function(b){b.addEventListener('click',function(){
+        var months=Number(b.getAttribute('data-m'));
+        btns.forEach(function(x){x.disabled=true;});
+        msg.textContent='正在开通…';msg.className='';
+        fetch('/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,months:months})})
+          .then(function(r){return r.json();})
+          .then(function(d){
+            if(d&&d.ok){msg.innerHTML='<span class="ok">✅ 已为 '+d.email+' 开通 '+d.months+' 个月会员，有效期至 '+new Date(d.memberUntil).toLocaleDateString('zh-CN')+'。</span>'+(d.pending?'<br><span class="note">该用户尚未注册，已建「待认领」会员账号，本人用此邮箱注册设密码后即可登录。</span>':'');}
+            else{msg.innerHTML='<span class="err">'+((d&&d.message)||'开通失败')+'</span>';btns.forEach(function(x){x.disabled=false;});}
+          })
+          .catch(function(){msg.innerHTML='<span class="err">网络异常，请重试。</span>';btns.forEach(function(x){x.disabled=false;});});
+      });});
+    </script>`));
+});
+
+app.post("/api/admin/grant", async (req, res) => {
+  const token = String(req.body?.token || "");
+  const months = Math.max(1, Math.min(24, Number(req.body?.months) || 1));
+  const payload = verifyGrantToken(token);
+  if (!payload) return res.status(400).json({ ok: false, message: "链接无效或已过期。" });
+  if (usedGrantTokens.has(token)) {
+    return res.status(409).json({ ok: false, message: "该链接已使用过。如需再次开通，请到后台「会员管理」手动操作。" });
+  }
+  try {
+    const result = await grantMembershipMonths(payload.email, months);
+    usedGrantTokens.set(token, Number(payload.exp) || Date.now() + 7 * 24 * 60 * 60 * 1000);
+    return res.json({ ok: true, months, ...result });
+  } catch (error) {
+    if (error.code === "MIGRATION_REQUIRED") {
+      return res.status(409).json({ ok: false, message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+    }
+    console.error("Grant via link failed:", error.message);
+    return res.status(500).json({ ok: false, message: "开通失败，请稍后再试或到后台手动操作。" });
   }
 });
 
@@ -1516,69 +1685,30 @@ app.patch("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
   const email = normalizeEmail(req.params.email);
   if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱不正确。" });
 
-  // 读取现有记录：判断是否已存在（用于「手动添加会员」占位创建）+ 续费基准时间。
-  let existing;
-  {
-    const { data, error } = await supabase
-      .from("visitors")
-      .select("email, member_until")
-      .eq("email", email)
-      .maybeSingle();
-    if (error) {
-      if (isMissingColumn(error)) {
-        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
-      }
-      console.error("Load visitor failed:", error.message);
-      return res.status(500).json({ message: "操作失败。", error: error.message });
-    }
-    existing = data;
-  }
-
-  // 计算新的会员到期时间。
-  let memberUntil;
-  if (req.body?.revoke) {
-    if (!existing) return res.status(404).json({ message: "用户不存在。" });
-    memberUntil = null;
-  } else {
-    const months = Math.max(1, Math.min(24, Number(req.body?.extendMonths) || 1));
-    let base = Date.now();
-    if (existing && existing.member_until && new Date(existing.member_until).getTime() > base) {
-      base = new Date(existing.member_until).getTime();
-    }
-    memberUntil = new Date(base + months * 30 * 24 * 60 * 60 * 1000).toISOString();
-  }
-
   try {
-    let data, error;
-    if (existing) {
-      ({ data, error } = await supabase
+    // 取消会员资格（保留账号）：仅对已存在用户置空 member_until。
+    if (req.body?.revoke) {
+      const { data, error } = await supabase
         .from("visitors")
-        .update({ member_until: memberUntil })
+        .update({ member_until: null })
         .eq("email", email)
-        .select("email, member_until")
-        .maybeSingle());
-    } else {
-      // 手动添加会员：账号尚不存在 → 用空密码占位创建，本人注册时可认领并设置真实密码（会员有效期保留）。
-      ({ data, error } = await supabase
-        .from("visitors")
-        .insert({ email, password_hash: "", member_until: memberUntil })
-        .select("email, member_until")
-        .maybeSingle());
-    }
-    if (error) {
-      if (isMissingColumn(error)) {
-        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+        .select("email")
+        .maybeSingle();
+      if (error) {
+        if (isMissingColumn(error)) return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+        throw error;
       }
-      throw error;
+      if (!data) return res.status(404).json({ message: "用户不存在。" });
+      return res.json({ email: data.email, memberUntil: null, member: false });
     }
-    if (!data) return res.status(404).json({ message: "用户不存在。" });
-    return res.json({
-      email: data.email,
-      memberUntil: data.member_until,
-      member: data.member_until ? new Date(data.member_until).getTime() > Date.now() : false,
-      pending: existing ? false : true,
-    });
+
+    // 授予 / 续费（账号不存在则占位创建）。
+    const result = await grantMembershipMonths(email, req.body?.extendMonths);
+    return res.json(result);
   } catch (error) {
+    if (error.code === "MIGRATION_REQUIRED") {
+      return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+    }
     console.error("Update visitor failed:", error.message);
     return res.status(500).json({ message: "操作失败。", error: error.message });
   }
