@@ -357,9 +357,10 @@ function signTokenPayload(encodedPayload) {
 }
 
 function createAdminToken() {
+  // 管理员令牌不设过期时间（长期有效）；如需作废可更换 ADMIN_SESSION_SECRET 使旧令牌全部失效。
   const payload = {
     username: ADMIN_USERNAME,
-    exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
+    iat: Date.now(),
   };
 
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -384,7 +385,11 @@ function verifyAdminToken(token) {
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
-    if (payload.username !== ADMIN_USERNAME || Number(payload.exp) < Date.now()) {
+    if (payload.username !== ADMIN_USERNAME) {
+      return null;
+    }
+    // 仅当令牌带 exp 时才校验过期（旧令牌仍按原过期时间处理；新令牌长期有效）。
+    if (payload.exp && Number(payload.exp) < Date.now()) {
       return null;
     }
     return payload;
@@ -1365,12 +1370,26 @@ app.post("/api/access/register", async (req, res) => {
   }
 
   try {
-    if (await visitorExists(email)) {
-      pendingCodes.delete(email);
-      return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
+    // 可能存在「管理员手动添加的会员」：账号已建好但密码为空占位，此时允许本人注册认领并设置密码（保留会员有效期）。
+    const { data: existing } = await supabase
+      .from("visitors")
+      .select("email, password_hash")
+      .eq("email", email)
+      .maybeSingle();
+    if (existing) {
+      if (existing.password_hash) {
+        pendingCodes.delete(email);
+        return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
+      }
+      const { error } = await supabase
+        .from("visitors")
+        .update({ password_hash: hashPassword(password) })
+        .eq("email", email);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("visitors").insert({ email, password_hash: hashPassword(password) });
+      if (error) throw error;
     }
-    const { error } = await supabase.from("visitors").insert({ email, password_hash: hashPassword(password) });
-    if (error) throw error;
   } catch (error) {
     console.error("Register failed:", error.message);
     return res.status(500).json({ message: "注册失败，请稍后再试。" });
@@ -1424,12 +1443,12 @@ app.get("/api/admin/visitors", requireAdmin, async (req, res) => {
   try {
     let { data, error } = await supabase
       .from("visitors")
-      .select("email, member_until, created_at")
+      .select("email, member_until, created_at, password_hash")
       .order("created_at", { ascending: false });
     if (error && isMissingColumn(error)) {
       ({ data, error } = await supabase
         .from("visitors")
-        .select("email, created_at")
+        .select("email, created_at, password_hash")
         .order("created_at", { ascending: false }));
     }
     if (error) throw error;
@@ -1440,6 +1459,8 @@ app.get("/api/admin/visitors", requireAdmin, async (req, res) => {
         createdAt: v.created_at,
         memberUntil: v.member_until || null,
         member: v.member_until ? new Date(v.member_until).getTime() > now : false,
+        // 密码为空 = 管理员手动添加、本人尚未注册认领。
+        pending: !v.password_hash,
       }))
     );
   } catch (error) {
@@ -1452,28 +1473,55 @@ app.patch("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
   const email = normalizeEmail(req.params.email);
   if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱不正确。" });
 
+  // 读取现有记录：判断是否已存在（用于「手动添加会员」占位创建）+ 续费基准时间。
+  let existing;
+  {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("email, member_until")
+      .eq("email", email)
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
+      }
+      console.error("Load visitor failed:", error.message);
+      return res.status(500).json({ message: "操作失败。", error: error.message });
+    }
+    existing = data;
+  }
+
+  // 计算新的会员到期时间。
   let memberUntil;
   if (req.body?.revoke) {
+    if (!existing) return res.status(404).json({ message: "用户不存在。" });
     memberUntil = null;
   } else {
     const months = Math.max(1, Math.min(24, Number(req.body?.extendMonths) || 1));
     let base = Date.now();
-    try {
-      const { data } = await supabase.from("visitors").select("member_until").eq("email", email).maybeSingle();
-      if (data && data.member_until && new Date(data.member_until).getTime() > base) {
-        base = new Date(data.member_until).getTime();
-      }
-    } catch {}
+    if (existing && existing.member_until && new Date(existing.member_until).getTime() > base) {
+      base = new Date(existing.member_until).getTime();
+    }
     memberUntil = new Date(base + months * 30 * 24 * 60 * 60 * 1000).toISOString();
   }
 
   try {
-    const { data, error } = await supabase
-      .from("visitors")
-      .update({ member_until: memberUntil })
-      .eq("email", email)
-      .select("email, member_until")
-      .maybeSingle();
+    let data, error;
+    if (existing) {
+      ({ data, error } = await supabase
+        .from("visitors")
+        .update({ member_until: memberUntil })
+        .eq("email", email)
+        .select("email, member_until")
+        .maybeSingle());
+    } else {
+      // 手动添加会员：账号尚不存在 → 用空密码占位创建，本人注册时可认领并设置真实密码（会员有效期保留）。
+      ({ data, error } = await supabase
+        .from("visitors")
+        .insert({ email, password_hash: "", member_until: memberUntil })
+        .select("email, member_until")
+        .maybeSingle());
+    }
     if (error) {
       if (isMissingColumn(error)) {
         return res.status(409).json({ message: "请先在 Supabase 执行 visitors.member_until 迁移。" });
@@ -1485,10 +1533,31 @@ app.patch("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
       email: data.email,
       memberUntil: data.member_until,
       member: data.member_until ? new Date(data.member_until).getTime() > Date.now() : false,
+      pending: existing ? false : true,
     });
   } catch (error) {
     console.error("Update visitor failed:", error.message);
     return res.status(500).json({ message: "操作失败。", error: error.message });
+  }
+});
+
+// 删除会员账号（连同会员资格一并移除；该邮箱可重新注册）。
+app.delete("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
+  const email = normalizeEmail(req.params.email);
+  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱不正确。" });
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .delete()
+      .eq("email", email)
+      .select("email")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ message: "用户不存在。" });
+    return res.json({ email: data.email, deleted: true });
+  } catch (error) {
+    console.error("Delete visitor failed:", error.message);
+    return res.status(500).json({ message: "删除失败。", error: error.message });
   }
 });
 

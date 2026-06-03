@@ -175,13 +175,15 @@ ClaudeAboutWeb/
 
 ### 会员（订阅制）与 AI 助手
 
-- **会员**：访客账号带 `member_until`（到期时间），在未来即为有效会员；**按月订阅**。后台「会员管理」面板可对每个用户「+1 个月」（授予/续费）或「取消会员」。
+- **会员**：访客账号带 `member_until`（到期时间），在未来即为有效会员；**按月订阅**。后台「会员管理」面板可对每个用户「+1 个月」（授予/续费）、「取消会员」（仅去资格、保留账号）或「删除」（彻底移除账号）。
+- **管理员 = 顶级会员**：管理员账号本身拥有全部会员权限（看私有源码、用 AI 助手），无需给自己开通会员。**管理员登录令牌长期有效、不过期**（如需作废全部管理员令牌，更换 `ADMIN_SESSION_SECRET` 即可）。
+- **手动添加会员**：后台支持直接输入邮箱授予会员。若该邮箱**尚未注册**，会先建立一个「待认领」账号（空密码占位）；本人之后用该邮箱注册并设置密码即可登录，已授予的会员有效期保留。
 - **会员特权**：
   - **站内只读浏览私有仓库源码**：详情页「浏览源码（站内只读）」打开站内文件浏览器，后端用服务端 `GITHUB_TOKEN` 拉取私有仓库的文件树与文件内容（`GET /api/projects/:id/repo/tree`、`/repo/file`，均需会员）。访客**不接触 GitHub、拿不到任何 GitHub 凭证，因此无法 `git clone`**；非会员看到「🔒 仅会员可见」，后端把 `repoUrl` 置空不泄露。
     - 说明：GitHub 没有「能看不能 clone」的协作者权限，所以采用站内只读浏览而非把人加进仓库。`GITHUB_TOKEN` 需对相关私有仓库有 Contents 读权限。
   - 使用**悬浮 AI 助手**（右下角 🤖）：`POST /api/assistant/chat`，仅会员/管理员可用，代理到 OpenAI 兼容接口（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`，支持 OpenAI / DeepSeek / Kimi / 智谱 等），带每账号每小时限流。
-- 后台接口：`GET /api/admin/visitors`（列出用户）、`PATCH /api/admin/visitors/:email`（`{extendMonths}` 续费 / `{revoke:true}` 取消）。
-- 真正的在线支付（Stripe 等）未集成；当前由管理员手动授予/续费会员（相当于人工订阅管理）。
+- 后台接口：`GET /api/admin/visitors`（列出用户）、`PATCH /api/admin/visitors/:email`（`{extendMonths}` 授予/续费、邮箱不存在时自动建「待认领」账号 / `{revoke:true}` 取消资格）、`DELETE /api/admin/visitors/:email`（删除账号）。
+- 真正的在线支付（Stripe / 微信 / 支付宝等）未集成；当前为**人工收款 + 管理员手动开通**的订阅模式：用户付款后，管理员在后台「会员管理」按月授予/续费会员。
 
 ### 前置条件 ⚠️
 
