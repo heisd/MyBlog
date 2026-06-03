@@ -98,6 +98,44 @@
     .cf-holder { min-height: 0; }
     .entered { text-align: center; }
     .entered .who { color: var(--muted); margin-bottom: 18px; }
+    .pay-panel { margin-top: 18px; text-align: left; }
+    .pay-toggle {
+      width: 100%; padding: 12px 16px; border-radius: 12px; cursor: pointer;
+      background: #fff7ef; border: 1px dashed var(--accent); color: var(--accent-dark);
+      font: inherit; font-weight: 800; transition: background 150ms ease;
+    }
+    .pay-toggle:hover { background: #ffedda; }
+    .pay-body {
+      margin-top: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px;
+      background: #fffdfa; display: grid; gap: 14px;
+      animation: pay-in 260ms ease;
+    }
+    @keyframes pay-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    .pay-tip { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.7; }
+    .plans { display: flex; gap: 10px; flex-wrap: wrap; }
+    .plan {
+      flex: 1 1 96px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px;
+      text-align: center; cursor: pointer; background: #fff; transition: all 150ms ease;
+    }
+    .plan:hover { border-color: var(--accent); }
+    .plan.active { border-color: var(--accent); background: #fff3e8; box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
+    .plan .p-months { font-weight: 800; color: var(--ink); }
+    .plan .p-price { color: var(--accent-dark); font-weight: 800; margin-top: 4px; }
+    .qr-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    .qr { margin: 0; text-align: center; }
+    .qr img { width: 160px; height: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 6px; }
+    .qr figcaption { margin-top: 6px; color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+    .qr-empty { color: var(--muted); font-size: 0.86rem; text-align: center; line-height: 1.7; }
+    .pay-note { margin: 0; color: var(--accent-dark); font-size: 0.88rem; font-weight: 700; }
+    #pay-remark {
+      width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: #fffefb; color: var(--ink); font: inherit;
+    }
+    #pay-remark:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
+    .pay-msg { min-height: 18px; font-size: 0.9rem; line-height: 1.6; margin: 0; color: var(--muted); }
+    .pay-msg.error { color: var(--danger); }
+    .pay-msg.success { color: #2f6b30; }
+    .member-good { color: #2f6b30; font-weight: 700; }
     .entered .button { width: 100%; max-width: 320px; }
     .topnote {
       margin-top: 18px; padding: 12px 14px; border-radius: 12px;
@@ -177,6 +215,24 @@
     <div class="auth-card entered" id="entered" hidden>
       <p class="who" id="who"></p>
       <a class="button button-primary" href="/projects" id="enter-btn">进入项目归档 →</a>
+
+      <div class="pay-panel" id="pay-panel" hidden>
+        <button type="button" class="pay-toggle" id="pay-toggle">⭐ 开通 / 续费会员</button>
+        <div class="pay-body" id="pay-body" hidden>
+          <p class="pay-tip">会员可<strong>站内浏览私有仓库源码</strong>、使用<strong>AI 助手</strong>。扫码付款后点下方「我已付款」，管理员核对后为你开通。</p>
+          <div class="plans" id="plans"></div>
+          <div class="qr-row" id="qr-row">
+            <figure class="qr" data-qr><img src="/assets/pay-wechat.png" alt="微信收款码" /><figcaption>微信扫码</figcaption></figure>
+            <figure class="qr" data-qr><img src="/assets/pay-alipay.png" alt="支付宝收款码" /><figcaption>支付宝扫码</figcaption></figure>
+          </div>
+          <p class="qr-empty" id="qr-empty" hidden>收款码尚未配置。请联系管理员获取付款方式。</p>
+          <p class="pay-note">付款时请在备注里填写你的登录邮箱，便于核对。</p>
+          <input type="text" id="pay-remark" placeholder="可填：付款金额 / 订单号 / 留言（选填）" autocomplete="off" />
+          <button type="button" class="button button-primary" id="pay-done">我已付款，通知管理员</button>
+          <p class="pay-msg" id="pay-msg"></p>
+        </div>
+      </div>
+
       <p style="margin-top:14px;"><button type="button" id="logout-btn" class="button button-secondary">退出登录</button></p>
     </div>
   </main>
@@ -184,6 +240,13 @@
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
     const TOKEN_KEY = "visitorAccessToken";
+    // 会员套餐与价格（按需修改：months = 月数，price = 展示价格）。
+    const PLANS = [
+      { months: 1, price: "¥9.9" },
+      { months: 3, price: "¥25" },
+      { months: 12, price: "¥88" },
+    ];
+    let selectedPlan = PLANS[0];
 
     const gate = document.getElementById("gate");
     const entered = document.getElementById("entered");
@@ -378,10 +441,85 @@
           who += "　·　普通用户（会员可看私有仓库 + AI 助手）";
         }
         document.getElementById("who").textContent = who;
+        setupPayPanel(Boolean(data.member));
         gate.hidden = true;
         entered.hidden = false;
       } catch {}
     }
+
+    // 支付面板：渲染套餐 + 收款码可用性检测 + 会员/续费文案
+    function setupPayPanel(isMember) {
+      const panel = document.getElementById("pay-panel");
+      const toggle = document.getElementById("pay-toggle");
+      toggle.textContent = isMember ? "⭐ 续费会员" : "⭐ 开通会员";
+      panel.hidden = false;
+
+      const plansEl = document.getElementById("plans");
+      if (!plansEl.dataset.ready) {
+        plansEl.innerHTML = PLANS.map((p, i) =>
+          `<div class="plan${i === 0 ? " active" : ""}" data-i="${i}">
+             <div class="p-months">${p.months} 个月</div>
+             <div class="p-price">${p.price}</div>
+           </div>`
+        ).join("");
+        plansEl.addEventListener("click", (e) => {
+          const el = e.target.closest(".plan");
+          if (!el) return;
+          plansEl.querySelectorAll(".plan").forEach((n) => n.classList.remove("active"));
+          el.classList.add("active");
+          selectedPlan = PLANS[Number(el.dataset.i)] || PLANS[0];
+        });
+        // 收款码加载失败则隐藏；全部失败则提示未配置。
+        document.querySelectorAll("#qr-row [data-qr] img").forEach((img) => {
+          img.addEventListener("error", () => {
+            img.closest("[data-qr]").hidden = true;
+            const left = document.querySelectorAll("#qr-row [data-qr]:not([hidden])").length;
+            if (!left) {
+              document.getElementById("qr-row").hidden = true;
+              document.getElementById("qr-empty").hidden = false;
+            }
+          });
+        });
+        plansEl.dataset.ready = "1";
+      }
+    }
+
+    function setPayMsg(text, type = "") {
+      const el = document.getElementById("pay-msg");
+      el.textContent = text;
+      el.className = "pay-msg" + (type ? " " + type : "");
+    }
+
+    document.getElementById("pay-toggle").addEventListener("click", () => {
+      const body = document.getElementById("pay-body");
+      body.hidden = !body.hidden;
+    });
+
+    document.getElementById("pay-done").addEventListener("click", async () => {
+      const btn = document.getElementById("pay-done");
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) { setPayMsg("登录状态已失效，请重新登录。", "error"); return; }
+      btn.disabled = true;
+      setPayMsg("正在通知管理员…", "");
+      try {
+        const res = await fetch(`${API_BASE}/api/access/payment-notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Access-Token": token },
+          body: JSON.stringify({
+            plan: `${selectedPlan.months} 个月 / ${selectedPlan.price}`,
+            note: document.getElementById("pay-remark").value || "",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "提交失败，请稍后再试。");
+        setPayMsg("已通知管理员 ✓ 核对到账后会为你开通，请稍后刷新查看会员状态。", "success");
+        document.getElementById("pay-remark").value = "";
+      } catch (e) {
+        setPayMsg(e.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     document.getElementById("enter-btn").addEventListener("click", (event) => {
       event.preventDefault();

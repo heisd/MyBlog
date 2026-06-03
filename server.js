@@ -1438,6 +1438,49 @@ app.post("/api/access/login", async (req, res) => {
   return res.json({ token: createVisitorToken(email), email });
 });
 
+// 会员支付：用户扫码付款后点「我已付款」，给管理员发邮件去后台手动开通（人工收款 + 手动开通）。
+const paymentNotifyByEmail = new Map();
+app.post("/api/access/payment-notify", requireVisitor, async (req, res) => {
+  const email = req.visitor ? req.visitor.email : req.adminSession ? `${ADMIN_USERNAME}(管理员)` : "";
+  const plan = String(req.body?.plan || "").slice(0, 60);
+  const note = String(req.body?.note || "").slice(0, 500);
+
+  if (req.visitor) {
+    // 每个账号限频，避免反复点。
+    if (!hitWindow(paymentNotifyByEmail, req.visitor.email, 60 * 60 * 1000, 5)) {
+      return res.status(429).json({ message: "提交过于频繁，请稍后再试，或直接联系管理员。" });
+    }
+  }
+
+  if (!emailConfigured()) {
+    return res.status(503).json({ message: "暂未配置通知邮箱，请直接联系管理员开通。", fallbackEmail: CONTACT_TO });
+  }
+
+  const lines = [
+    "有用户报告已完成会员付款，请到后台「会员管理」为其开通 / 续费。",
+    "",
+    `账号邮箱：${email}`,
+    `选择套餐：${plan || "（未填写）"}`,
+    `用户备注：${note || "（无）"}`,
+    `提交时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    "",
+    "操作：打开 /admin → 会员管理 → 给该邮箱「+N 个月」。若用户尚未注册，可直接「手动添加会员」。",
+  ];
+
+  try {
+    await sendEmailMessage({
+      to: CONTACT_TO,
+      subject: `【会员开通申请】${email}`,
+      text: lines.join("\n"),
+      replyTo: req.visitor ? req.visitor.email : undefined,
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Payment notify failed:", error.message);
+    return res.status(502).json({ message: "通知发送失败，请稍后再试或直接联系管理员。", fallbackEmail: CONTACT_TO });
+  }
+});
+
 // 后台：会员管理（列出访客、授予/续费/取消会员）
 app.get("/api/admin/visitors", requireAdmin, async (req, res) => {
   try {
