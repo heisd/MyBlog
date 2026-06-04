@@ -2173,6 +2173,10 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "admin.html"));
 });
 
+app.get("/editor", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "editor.html"));
+});
+
 app.get("/admin-login", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "admin-login.html"));
 });

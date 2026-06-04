@@ -45,11 +45,6 @@
       text-decoration: none;
       font-weight: 700;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 0.95fr;
-      gap: 22px;
-    }
     .panel {
       background: var(--card);
       border: 1px solid var(--line);
@@ -57,35 +52,17 @@
       padding: 24px;
       box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
     }
-    h1, h2 {
-      margin-top: 0;
-    }
-    form {
-      display: grid;
-      gap: 14px;
-    }
-    label {
-      display: grid;
-      gap: 8px;
-      font-weight: 700;
-    }
-    input, textarea {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 14px;
-      font: inherit;
-      background: #fbfdff;
-    }
-    textarea {
-      min-height: 140px;
-      resize: vertical;
-    }
-    .actions {
+    .panel + .panel { margin-top: 22px; }
+    h1, h2 { margin-top: 0; }
+    .panel-head {
       display: flex;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
     }
+    .panel-head h2 { margin: 0; }
     button {
       position: relative;
       overflow: hidden;
@@ -112,20 +89,23 @@
       outline: 3px solid rgba(22, 101, 52, 0.4);
       outline-offset: 2px;
     }
+    .btn-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 12px 20px;
+      font-weight: 700;
+      transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+    }
+    .btn-link:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(22, 101, 52, 0.4); }
+    .btn-link:active { transform: translateY(0) scale(0.97); }
     @media (prefers-reduced-motion: reduce) {
-      button {
-        transition: background-color 150ms ease;
-      }
-      button:hover,
-      button:active {
-        transform: none;
-      }
-      .primary {
-        animation: none;
-      }
-      .ripple {
-        display: none;
-      }
+      button { transition: background-color 150ms ease; }
+      button:hover, button:active { transform: none; }
+      .primary { animation: none; }
+      .ripple { display: none; }
     }
     .primary {
       background: linear-gradient(120deg, #166534, #1f8a4c, #0f4429, #166534);
@@ -158,12 +138,8 @@
       animation: ripple-anim 600ms linear;
       pointer-events: none;
     }
-    .secondary .ripple {
-      background: rgba(15, 23, 42, 0.14);
-    }
-    @keyframes ripple-anim {
-      to { transform: scale(4); opacity: 0; }
-    }
+    .secondary .ripple { background: rgba(15, 23, 42, 0.14); }
+    @keyframes ripple-anim { to { transform: scale(4); opacity: 0; } }
     .message {
       min-height: 24px;
       color: var(--muted);
@@ -174,316 +150,15 @@
       font-size: 0.92rem;
       line-height: 1.6;
     }
-    .tag-input {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 8px 10px;
-      background: #fbfdff;
-      transition: border-color 150ms ease, box-shadow 150ms ease;
-    }
-    .tag-input:focus-within {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.14);
-    }
-    .tag-chips { display: contents; }
-    .tag-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: #e7f0ea;
-      color: var(--accent);
-      border-radius: 999px;
-      padding: 5px 6px 5px 12px;
-      font-size: 0.85rem;
-      font-weight: 700;
-    }
-    .tag-pill button {
-      background: none;
-      border: none;
-      color: inherit;
-      cursor: pointer;
-      font-size: 1.05rem;
-      line-height: 1;
-      padding: 0 4px;
-      border-radius: 50%;
-    }
-    .tag-input input {
-      flex: 1;
-      min-width: 150px;
-      border: none;
-      outline: none;
-      background: transparent;
-      padding: 4px;
-      font: inherit;
-    }
-    .tag-suggest {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: -4px;
-      align-items: center;
-    }
-    .tag-suggest .label {
-      color: var(--muted);
-      font-size: 0.86rem;
-    }
-    .tag-suggest button {
-      background: #fff;
-      border: 1px dashed var(--line);
-      color: var(--muted);
-      border-radius: 999px;
-      padding: 5px 12px;
-      font: inherit;
-      font-weight: 700;
-      font-size: 0.82rem;
-      cursor: pointer;
-    }
-    .tag-suggest button:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-    .upload-row {
-      display: grid;
-      gap: 12px;
-      padding: 18px;
-      border: 1.5px dashed #c7d2e0;
-      border-radius: 16px;
-      background: linear-gradient(180deg, #fbfdff, #f4f7fb);
-      transition: border-color 180ms ease, box-shadow 180ms ease;
-    }
-    .upload-row:hover {
-      border-color: var(--accent);
-      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
-    }
-    .field-label {
-      font-weight: 700;
-      font-size: 0.95rem;
-    }
-    .dropzone {
-      position: relative;
+    .new-article {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 16px;
-      border: 1.5px dashed #c7d2e0;
-      border-radius: 12px;
-      background: #fff;
-      color: var(--muted);
-      cursor: pointer;
-      transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
-    }
-    .dropzone:hover,
-    .dropzone.dragover {
-      border-color: var(--accent);
-      background: #f3f8ff;
-      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-    }
-    .dropzone input[type="file"] {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
-    }
-    .dz-icon {
-      font-weight: 900;
-      color: var(--accent);
-      font-size: 1.1rem;
-    }
-    .dz-text {
-      font-size: 0.9rem;
-    }
-    .file-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .file-chips:empty {
-      display: none;
-    }
-    .file-chip {
-      position: relative;
-      width: 150px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fff;
-      overflow: hidden;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
-    }
-    .file-chip-thumb {
-      height: 84px;
-      background: #f1f5f9;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-    .file-chip-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .file-chip-thumb .ext {
-      font-weight: 800;
-      color: #94a3b8;
-      font-size: 1.3rem;
-      letter-spacing: 0.05em;
-    }
-    .file-chip-body {
-      padding: 8px 10px 10px;
-    }
-    .file-chip-name {
-      font-size: 0.82rem;
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .file-chip-badge {
-      display: inline-block;
-      margin-top: 5px;
-      font-size: 0.68rem;
-      font-weight: 800;
-      color: var(--accent);
-      background: #e9eef7;
-      padding: 2px 8px;
-      border-radius: 6px;
-    }
-    .file-chip-remove {
-      position: absolute;
-      top: 6px;
-      left: 6px;
-      width: 24px;
-      height: 24px;
-      padding: 0;
-      border-radius: 50%;
-      border: none;
-      background: rgba(17, 24, 39, 0.72);
-      color: #fff;
-      font-size: 16px;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 150ms ease, background-color 150ms ease;
-    }
-    .file-chip:hover .file-chip-remove,
-    .file-chip:focus-within .file-chip-remove {
-      opacity: 1;
-    }
-    .file-chip-remove:hover {
-      background: var(--danger);
-    }
-    .upload-actions {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .upload-row button:not(.preview-remove) {
-      background: #fff;
-      color: var(--accent);
-      border: 1.5px solid var(--accent);
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .upload-row button:not(.preview-remove)::before {
-      content: "↑";
-      font-weight: 900;
-    }
-    .upload-row button:not(.preview-remove):hover {
-      background: var(--accent);
-      color: #fff;
-    }
-    .upload-status {
-      color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.6;
-    }
-    .preview-wrap {
-      position: relative;
-      display: inline-block;
-      margin-top: 4px;
-      max-width: 100%;
-    }
-    .preview-wrap img {
-      display: block;
-      max-width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-    }
-    .preview-wrap .preview-remove {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 30px;
-      height: 30px;
-      padding: 0;
-      border-radius: 50%;
-      border: 2px solid #fff;
-      background: rgba(17, 24, 39, 0.62);
-      color: #fff;
-      font-size: 20px;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-    }
-    .preview-wrap .preview-remove:hover {
-      background: var(--danger);
-    }
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.45);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 50;
-    }
-    .modal-overlay.open {
-      display: flex;
-    }
-    .modal {
-      background: #fff;
-      border-radius: 18px;
-      max-width: 460px;
-      width: 100%;
-      padding: 22px 22px 18px;
-      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.3);
-    }
-    .modal h3 {
-      margin: 0 0 10px;
-    }
-    .modal .modal-row {
-      margin: 12px 0;
-      font-size: 0.92rem;
-      line-height: 1.6;
-      padding: 10px 12px;
-      background: #f6f8fb;
-      border-radius: 10px;
-    }
-    .modal .modal-detected {
-      color: var(--accent);
-      word-break: break-word;
-    }
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      margin-top: 16px;
+      justify-content: space-between;
+      gap: 16px;
       flex-wrap: wrap;
     }
+    .new-article .na-text h2 { margin: 0 0 4px; }
+    .new-article .na-text p { margin: 0; color: var(--muted); line-height: 1.6; }
     .project-list {
       display: grid;
       gap: 14px;
@@ -494,15 +169,11 @@
       padding: 18px;
       display: grid;
       gap: 10px;
+      animation: pcard-in 360ms ease backwards;
+      transition: box-shadow 180ms ease, border-color 180ms ease;
     }
-    .project-card h3 {
-      margin: 0;
-    }
-    .project-card p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.7;
-    }
+    .project-card h3 { margin: 0; }
+    .project-card p { margin: 0; color: var(--muted); line-height: 1.7; }
     .meta-row {
       display: flex;
       flex-wrap: wrap;
@@ -524,13 +195,14 @@
       gap: 10px;
       flex-wrap: wrap;
     }
-    .project-card .card-actions button {
+    .project-card .card-actions button,
+    .project-card .card-actions a {
       padding: 10px 14px;
       border-radius: 10px;
-    }
-    .project-card {
-      animation: pcard-in 360ms ease backwards;
-      transition: box-shadow 180ms ease, border-color 180ms ease;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
     }
     @keyframes pcard-in {
       from { opacity: 0; transform: translateY(8px); }
@@ -549,18 +221,6 @@
       font-weight: 800;
       letter-spacing: 0.02em;
     }
-    .visitor-add {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      margin: 4px 0 2px;
-    }
-    .visitor-add input[type="email"] {
-      flex: 1 1 240px;
-      min-width: 0;
-    }
-    .visitor-add select { flex: 0 0 auto; }
     .badge-pin { background: #fde9d3; color: #b45309; }
     .badge-draft { background: #e2e8f0; color: #475569; }
     .badge-pub { background: #dcfce7; color: #166534; }
@@ -578,25 +238,6 @@
       font-size: 0.78rem;
       font-weight: 700;
     }
-    .form-flags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 18px;
-      padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fbfdff;
-    }
-    .flag {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 700;
-      cursor: pointer;
-      user-select: none;
-    }
-    .flag input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
-    .flag .flag-hint { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
     .admin-filters {
       display: flex;
       flex-direction: column;
@@ -624,10 +265,29 @@
     }
     .afilter button:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
     .afilter button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-    @media (max-width: 860px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
+    .visitor-add {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 4px 0 2px;
+    }
+    .visitor-add input[type="email"] {
+      flex: 1 1 240px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      background: #fbfdff;
+    }
+    .visitor-add select {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      background: #fbfdff;
     }
   </style>
 </head>
@@ -644,125 +304,28 @@
       </div>
     </div>
 
-    <div class="grid">
-      <section class="panel">
-        <h2 id="form-title">新建项目</h2>
-        <form id="project-form">
-          <label>
-            标题
-            <input id="title" name="title" required>
-          </label>
-          <label>
-            摘要
-            <textarea id="summary" name="summary" required></textarea>
-          </label>
-          <label>
-            标签（用于分类筛选，可填多个）
-            <div class="tag-input" id="tag-input">
-              <span class="tag-chips" id="tag-chips"></span>
-              <input id="tagField" type="text" placeholder="输入标签后按回车或逗号添加" autocomplete="off">
-            </div>
-          </label>
-          <div class="tag-suggest" id="tag-suggest">
-            <span class="label">快速添加：</span>
-          </div>
-          <label>
-            封面图片链接（可粘贴外链，或用下方上传本地图片）
-            <input id="coverImage" name="coverImage" type="url" required>
-          </label>
-          <div class="upload-row">
-            <div class="field-label">本地封面图片（可选，上传后自动填入上方链接）</div>
-            <label class="dropzone">
-              <input id="coverFile" name="coverFile" type="file" accept="image/*">
-              <span class="dz-icon">⬆</span>
-              <span class="dz-text">点击选择或拖拽图片到此（≤ 8MB）</span>
-            </label>
-            <div class="file-chips" id="coverFile-chips"></div>
-            <div class="upload-actions">
-              <button class="secondary" type="button" id="upload-cover-button">上传本地图片</button>
-              <span id="cover-upload-status" class="upload-status">想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。</span>
-            </div>
-            <div id="cover-preview-wrap" class="preview-wrap" style="display:none;">
-              <img id="cover-preview" alt="封面预览">
-              <button type="button" id="cover-remove" class="preview-remove" aria-label="删除封面图片" title="删除封面图片">×</button>
-            </div>
-          </div>
-          <label>
-            GitHub 仓库链接（可选）
-            <input id="repoUrl" name="repoUrl" type="url" placeholder="https://github.com/用户名/仓库">
-          </label>
-          <label>
-            视频链接（可选）
-            <input id="videoUrl" name="videoUrl" type="url" placeholder="支持 mp4 / webm 直链，或可嵌入视频链接">
-          </label>
-          <div class="upload-row">
-            <div class="field-label">本地视频文件（可选）</div>
-            <label class="dropzone">
-              <input id="videoFile" name="videoFile" type="file" accept="video/*">
-              <span class="dz-icon">⬆</span>
-              <span class="dz-text">点击选择或拖拽视频到此</span>
-            </label>
-            <div class="file-chips" id="videoFile-chips"></div>
-            <div class="upload-actions">
-              <button class="secondary" type="button" id="upload-video-button">上传本地视频</button>
-              <span id="upload-status" class="upload-status">如果你想直接使用电脑里的视频，请先选择文件再点击上传。</span>
-            </div>
-          </div>
-          <p class="hint">如果填写视频链接，项目详情页会自动显示“项目演示视频”模块。</p>
-          <label>
-            正文内容（支持 HTML）
-            <textarea id="content" name="content" required></textarea>
-          </label>
-          <div class="upload-row">
-            <div class="field-label">导入文档（.md / .markdown / .txt / .docx / .pdf）</div>
-            <label class="dropzone">
-              <input id="docFile" name="docFile" type="file" accept=".md,.markdown,.txt,.docx,.pdf">
-              <span class="dz-icon">⬆</span>
-              <span class="dz-text">点击选择或拖拽文档到此（≤ 15MB）</span>
-            </label>
-            <div class="file-chips" id="docFile-chips"></div>
-            <div class="upload-actions">
-              <button class="secondary" type="button" id="import-doc-button">导入文档到正文</button>
-              <span id="doc-import-status" class="upload-status">上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。</span>
-            </div>
-          </div>
-          <div class="upload-row">
-            <div class="field-label">正文插图（可多选，上传后在光标处依次插入 &lt;img&gt;）</div>
-            <label class="dropzone">
-              <input id="contentImageFile" name="contentImageFile" type="file" accept="image/*" multiple>
-              <span class="dz-icon">⬆</span>
-              <span class="dz-text">点击选择或拖拽图片到此（可多选，每张 ≤ 8MB）</span>
-            </label>
-            <div class="file-chips" id="contentImageFile-chips"></div>
-            <div class="upload-actions">
-              <button class="secondary" type="button" id="upload-content-image-button">上传图片插入正文</button>
-              <span id="content-image-status" class="upload-status">先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。</span>
-            </div>
-          </div>
-          <div class="form-flags">
-            <label class="flag"><input type="checkbox" id="isDraft"> 存为草稿 <span class="flag-hint">（不在前台显示）</span></label>
-            <label class="flag"><input type="checkbox" id="isPinned"> 置顶 <span class="flag-hint">（前台优先展示）</span></label>
-          </div>
-          <div class="actions">
-            <button class="primary" type="submit">保存项目</button>
-            <button class="secondary" type="button" id="reset-button">重置表单</button>
-          </div>
-        </form>
-      </section>
+    <section class="panel new-article">
+      <div class="na-text">
+        <h2>写文章</h2>
+        <p>点击进入全屏编辑器：左侧写正文、右侧实时预览，其余设置在右侧侧边栏。</p>
+      </div>
+      <a class="btn-link primary" href="/editor">＋ 新建文章</a>
+    </section>
 
-      <section class="panel">
+    <section class="panel">
+      <div class="panel-head">
         <h2>现有项目</h2>
-        <div class="admin-filters" id="admin-filters" style="display:none;">
-          <div class="afilter" id="status-filter"><span class="label">状态</span></div>
-          <div class="afilter" id="tag-filter"><span class="label">标签</span></div>
-        </div>
-        <div id="project-list" class="project-list">
-          <div class="project-card"><p>正在加载项目...</p></div>
-        </div>
-      </section>
-    </div>
+      </div>
+      <div class="admin-filters" id="admin-filters" style="display:none;">
+        <div class="afilter" id="status-filter"><span class="label">状态</span></div>
+        <div class="afilter" id="tag-filter"><span class="label">标签</span></div>
+      </div>
+      <div id="project-list" class="project-list">
+        <div class="project-card"><p>正在加载项目...</p></div>
+      </div>
+    </section>
 
-    <section class="panel" style="margin-top:22px;">
+    <section class="panel">
       <h2>会员管理</h2>
       <p class="hint">会员（订阅制 · 按月）可查看项目的私有 GitHub 链接、使用 AI 助手。管理员账号本身已拥有全部会员权限。点「+1 个月」授予或续费，点「取消会员」仅取消资格（保留账号），点「删除」彻底移除账号。</p>
       <div class="visitor-add">
@@ -782,61 +345,18 @@
     </section>
   </main>
 
-  <div class="modal-overlay" id="replace-modal">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="replace-modal-title">
-      <h3 id="replace-modal-title">是否用识别结果替换？</h3>
-      <p>文档中识别到下列内容，而表单对应字段已有内容。你想怎么处理？</p>
-      <div id="replace-modal-body"></div>
-      <div class="modal-actions">
-        <button class="secondary" type="button" id="replace-keep">保留原内容</button>
-        <button class="primary" type="button" id="replace-apply">用识别结果替换</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
     const AUTH_TOKEN_KEY = "adminToken";
-    const form = document.getElementById("project-form");
     const message = document.getElementById("message");
     const projectList = document.getElementById("project-list");
-    const formTitle = document.getElementById("form-title");
-    const resetButton = document.getElementById("reset-button");
     const logoutButton = document.getElementById("logout-button");
-    const uploadVideoButton = document.getElementById("upload-video-button");
-    const uploadStatus = document.getElementById("upload-status");
-    const uploadCoverButton = document.getElementById("upload-cover-button");
-    const coverUploadStatus = document.getElementById("cover-upload-status");
-    const coverPreview = document.getElementById("cover-preview");
-    const coverPreviewWrap = document.getElementById("cover-preview-wrap");
-    const coverRemove = document.getElementById("cover-remove");
-    const coverImageInput = document.getElementById("coverImage");
-    const uploadContentImageButton = document.getElementById("upload-content-image-button");
-    const contentImageStatus = document.getElementById("content-image-status");
-    const importDocButton = document.getElementById("import-doc-button");
-    const docImportStatus = document.getElementById("doc-import-status");
-    const replaceModal = document.getElementById("replace-modal");
-    const replaceModalBody = document.getElementById("replace-modal-body");
-    const replaceApply = document.getElementById("replace-apply");
-    const replaceKeep = document.getElementById("replace-keep");
-    const FILE_INPUT_IDS = ["coverFile", "videoFile", "docFile", "contentImageFile"];
-    const tagField = document.getElementById("tagField");
-    const tagChips = document.getElementById("tag-chips");
-    const tagSuggest = document.getElementById("tag-suggest");
-    const TAG_SUGGESTIONS = ["视觉", "语音", "AI", "机器人", "嵌入式"];
-    const isDraftInput = document.getElementById("isDraft");
-    const isPinnedInput = document.getElementById("isPinned");
     const adminFilters = document.getElementById("admin-filters");
     const statusFilter = document.getElementById("status-filter");
     const tagFilter = document.getElementById("tag-filter");
-    let currentTags = [];
     let allAdminProjects = [];
     let adminFilterStatus = "全部";
     let adminFilterTag = "全部";
-    const DEFAULT_DOC_STATUS = "上传文档会自动解析为正文 HTML，并提取目录、尝试填入标题/摘要（≤ 15MB，已填的标题/摘要不会被覆盖）。";
-    const DEFAULT_COVER_STATUS = "想用电脑里的图片做封面？选择文件后点击上传（≤ 8MB）。";
-    const DEFAULT_CONTENT_IMAGE_STATUS = "先把光标放到正文里想插入的位置，选择一张或多张图片后点这里（每张 ≤ 8MB）。";
-    let editingId = null;
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
 
     function setMessage(text, isError = false) {
@@ -853,195 +373,6 @@
         .replaceAll("'", "&#39;");
     }
 
-    function renderTags() {
-      tagChips.innerHTML = currentTags
-        .map(
-          (tag) =>
-            `<span class="tag-pill">${escapeHtml(tag)}<button type="button" data-tag="${escapeHtml(tag)}" aria-label="移除标签">×</button></span>`
-        )
-        .join("");
-    }
-
-    function setTags(tags) {
-      const seen = new Set();
-      currentTags = [];
-      (Array.isArray(tags) ? tags : []).forEach((value) => {
-        const tag = String(value).trim().slice(0, 24);
-        if (tag && !seen.has(tag)) {
-          seen.add(tag);
-          currentTags.push(tag);
-        }
-      });
-      renderTags();
-    }
-
-    function addTag(value) {
-      const tag = String(value || "").trim().slice(0, 24);
-      if (!tag || currentTags.length >= 12 || currentTags.includes(tag)) return;
-      currentTags.push(tag);
-      renderTags();
-    }
-
-    function removeTag(tag) {
-      currentTags = currentTags.filter((item) => item !== tag);
-      renderTags();
-    }
-
-    function flushPendingTag() {
-      if (tagField.value.trim()) {
-        addTag(tagField.value);
-        tagField.value = "";
-      }
-    }
-
-    function fileExt(name) {
-      const match = /\.([a-z0-9]+)$/i.exec(name || "");
-      return match ? match[1].toUpperCase() : "FILE";
-    }
-
-    function removeFileAt(input, index) {
-      const dt = new DataTransfer();
-      Array.from(input.files).forEach((file, i) => {
-        if (i !== index) dt.items.add(file);
-      });
-      input.files = dt.files;
-    }
-
-    // 渲染所选文件为 Claude 风格的卡片（缩略图/类型徽章 + 悬停删除）。
-    function renderChips(input) {
-      const chips = document.getElementById(`${input.id}-chips`);
-      if (!chips) return;
-      chips.innerHTML = "";
-      Array.from(input.files || []).forEach((file, index) => {
-        const chip = document.createElement("div");
-        chip.className = "file-chip";
-
-        const thumb = document.createElement("div");
-        thumb.className = "file-chip-thumb";
-        if ((file.type || "").startsWith("image/")) {
-          const img = document.createElement("img");
-          const url = URL.createObjectURL(file);
-          img.src = url;
-          img.onload = () => URL.revokeObjectURL(url);
-          thumb.appendChild(img);
-        } else {
-          const ext = document.createElement("span");
-          ext.className = "ext";
-          ext.textContent = fileExt(file.name);
-          thumb.appendChild(ext);
-        }
-
-        const body = document.createElement("div");
-        body.className = "file-chip-body";
-        const name = document.createElement("div");
-        name.className = "file-chip-name";
-        name.textContent = file.name;
-        name.title = file.name;
-        const badge = document.createElement("span");
-        badge.className = "file-chip-badge";
-        badge.textContent = fileExt(file.name);
-        body.appendChild(name);
-        body.appendChild(badge);
-
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "file-chip-remove";
-        remove.textContent = "×";
-        remove.title = "移除";
-        remove.setAttribute("aria-label", "移除文件");
-        remove.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          removeFileAt(input, index);
-          renderChips(input);
-        });
-
-        chip.appendChild(thumb);
-        chip.appendChild(body);
-        chip.appendChild(remove);
-        chips.appendChild(chip);
-      });
-    }
-
-    function clearFileInput(input) {
-      input.value = "";
-      renderChips(input);
-    }
-
-    function setupDropzone(input) {
-      const zone = input.closest(".dropzone");
-      input.addEventListener("change", () => renderChips(input));
-      if (!zone) return;
-      ["dragenter", "dragover"].forEach((type) =>
-        zone.addEventListener(type, (event) => {
-          event.preventDefault();
-          zone.classList.add("dragover");
-        })
-      );
-      ["dragleave", "drop"].forEach((type) =>
-        zone.addEventListener(type, (event) => {
-          event.preventDefault();
-          zone.classList.remove("dragover");
-        })
-      );
-      zone.addEventListener("drop", (event) => {
-        const dropped = Array.from(event.dataTransfer.files || []);
-        if (!dropped.length) return;
-        const dt = new DataTransfer();
-        if (input.multiple) {
-          Array.from(input.files).forEach((file) => dt.items.add(file));
-          dropped.forEach((file) => dt.items.add(file));
-        } else {
-          dt.items.add(dropped[0]);
-        }
-        input.files = dt.files;
-        renderChips(input);
-      });
-    }
-
-    // 弹窗询问是否用识别结果替换已有的标题/摘要，返回 Promise<boolean>。
-    function askReplace(items) {
-      return new Promise((resolve) => {
-        replaceModalBody.innerHTML = items
-          .map(
-            (item) =>
-              `<div class="modal-row"><b>${escapeHtml(item.label)}</b><br>当前：${escapeHtml(item.current)}<br><span class="modal-detected">识别：${escapeHtml(item.detected)}</span></div>`
-          )
-          .join("");
-        replaceModal.classList.add("open");
-        const finish = (result) => {
-          replaceModal.classList.remove("open");
-          replaceApply.removeEventListener("click", onApply);
-          replaceKeep.removeEventListener("click", onKeep);
-          resolve(result);
-        };
-        const onApply = () => finish(true);
-        const onKeep = () => finish(false);
-        replaceApply.addEventListener("click", onApply);
-        replaceKeep.addEventListener("click", onKeep);
-      });
-    }
-
-    function resetForm(statusText = "已进入后台，可以开始管理项目。") {
-      editingId = null;
-      form.reset();
-      formTitle.textContent = "新建项目";
-      uploadStatus.textContent = "如果你想直接使用电脑里的视频，请先选择文件再点击上传。";
-      coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
-      contentImageStatus.textContent = DEFAULT_CONTENT_IMAGE_STATUS;
-      docImportStatus.textContent = DEFAULT_DOC_STATUS;
-      showCoverPreview("");
-      setTags([]);
-      tagField.value = "";
-      isDraftInput.checked = false;
-      isPinnedInput.checked = false;
-      FILE_INPUT_IDS.forEach((id) => {
-        const input = document.getElementById(id);
-        if (input) renderChips(input);
-      });
-      setMessage(statusText);
-    }
-
     function redirectToLogin() {
       localStorage.removeItem(AUTH_TOKEN_KEY);
       window.location.href = "/admin-login";
@@ -1052,17 +383,11 @@
       if (authToken) {
         headers.Authorization = `Bearer ${authToken}`;
       }
-
-      const response = await fetch(url, {
-        ...options,
-        headers
-      });
-
+      const response = await fetch(url, { ...options, headers });
       if (response.status === 401) {
         redirectToLogin();
         throw new Error("登录状态已失效，请重新登录。");
       }
-
       return response;
     }
 
@@ -1080,7 +405,6 @@
         redirectToLogin();
         return false;
       }
-
       try {
         const response = await authFetch(`${API_BASE}/api/auth/verify`);
         return response.ok;
@@ -1088,14 +412,6 @@
         redirectToLogin();
         return false;
       }
-    }
-
-    async function fetchProject(id) {
-      const response = await authFetch(`${API_BASE}/api/projects/${id}`);
-      if (!response.ok) {
-        throw new Error("加载项目详情失败。");
-      }
-      return parseJsonResponse(response);
     }
 
     async function loadAdminProjects() {
@@ -1171,216 +487,13 @@
             <div class="card-actions">
               <button class="secondary" data-action="pin" data-id="${escapeHtml(project.id)}">${project.pinned ? "取消置顶" : "置顶"}</button>
               <button class="secondary" data-action="status" data-id="${escapeHtml(project.id)}">${isDraftP ? "发布" : "转草稿"}</button>
-              <button class="secondary" data-action="edit" data-id="${escapeHtml(project.id)}">编辑</button>
+              <a class="secondary" href="/editor?id=${encodeURIComponent(project.id)}">编辑</a>
               <button class="danger" data-action="delete" data-id="${escapeHtml(project.id)}">删除</button>
             </div>
           </article>`;
         })
         .join("");
     }
-
-    async function uploadSelectedVideo() {
-      const fileInput = form.videoFile;
-      const file = fileInput.files[0];
-      if (!file) {
-        throw new Error("请先选择一个本地视频文件。");
-      }
-
-      uploadStatus.textContent = `正在上传：${file.name}`;
-      const formData = new FormData();
-      formData.append("video", file);
-
-      const response = await authFetch(`${API_BASE}/api/uploads/video`, {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await parseJsonResponse(response);
-      if (!response.ok) {
-        throw new Error(result.message || "视频上传失败。");
-      }
-
-      form.videoUrl.value = result.videoUrl;
-      uploadStatus.textContent = "视频上传成功，链接已自动填入。";
-      clearFileInput(form.videoFile);
-      return result.videoUrl;
-    }
-
-    function showCoverPreview(url) {
-      if (url) {
-        coverPreview.src = url;
-        coverPreviewWrap.style.display = "inline-block";
-      } else {
-        coverPreview.removeAttribute("src");
-        coverPreviewWrap.style.display = "none";
-      }
-    }
-
-    async function uploadSelectedImage() {
-      const file = form.coverFile.files[0];
-      if (!file) {
-        throw new Error("请先选择一张本地图片。");
-      }
-
-      coverUploadStatus.textContent = `正在上传：${file.name}`;
-      const formData = new FormData();
-      formData.append("image", file);
-
-      const response = await authFetch(`${API_BASE}/api/uploads/image`, {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await parseJsonResponse(response);
-      if (!response.ok) {
-        throw new Error(result.message || "图片上传失败。");
-      }
-
-      form.coverImage.value = result.imageUrl;
-      showCoverPreview(result.imageUrl);
-      coverUploadStatus.textContent = "图片上传成功，链接已自动填入。";
-      clearFileInput(form.coverFile);
-      return result.imageUrl;
-    }
-
-    function insertIntoContent(snippet) {
-      const textarea = form.content;
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      textarea.value = textarea.value.slice(0, start) + snippet + textarea.value.slice(end);
-      const caret = start + snippet.length;
-      textarea.focus();
-      textarea.setSelectionRange(caret, caret);
-    }
-
-    async function uploadContentImage() {
-      const files = Array.from(form.contentImageFile.files || []);
-      if (!files.length) {
-        throw new Error("请先选择图片（可多选）。");
-      }
-
-      let done = 0;
-      for (const file of files) {
-        contentImageStatus.textContent = `正在上传（${done + 1}/${files.length}）：${file.name}`;
-        const formData = new FormData();
-        formData.append("image", file);
-
-        const response = await authFetch(`${API_BASE}/api/uploads/image`, {
-          method: "POST",
-          body: formData
-        });
-
-        const result = await parseJsonResponse(response);
-        if (!response.ok) {
-          throw new Error(result.message || `「${file.name}」上传失败。`);
-        }
-
-        const snippet = `\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`;
-        insertIntoContent(snippet);
-        done += 1;
-      }
-
-      contentImageStatus.textContent = `已上传并插入 ${done} 张图片。`;
-      clearFileInput(form.contentImageFile);
-    }
-
-    async function importDocument() {
-      const file = form.docFile.files[0];
-      if (!file) {
-        throw new Error("请先选择一个文档文件（.md / .docx / .pdf 等）。");
-      }
-
-      docImportStatus.textContent = `正在解析：${file.name}`;
-      const formData = new FormData();
-      formData.append("document", file);
-
-      const response = await authFetch(`${API_BASE}/api/uploads/document`, {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await parseJsonResponse(response);
-      if (!response.ok) {
-        throw new Error(result.message || "文档解析失败。");
-      }
-
-      insertIntoContent(result.html || "");
-
-      const filled = [];
-      const conflicts = [];
-      if (result.title) {
-        if (!form.title.value.trim()) {
-          form.title.value = result.title;
-          filled.push("标题");
-        } else if (form.title.value.trim() !== result.title) {
-          conflicts.push({ label: "标题", field: "title", detected: result.title, current: form.title.value.trim() });
-        }
-      }
-      if (result.summary) {
-        if (!form.summary.value.trim()) {
-          form.summary.value = result.summary;
-          filled.push("摘要");
-        } else if (form.summary.value.trim() !== result.summary) {
-          conflicts.push({ label: "摘要", field: "summary", detected: result.summary, current: form.summary.value.trim() });
-        }
-      }
-
-      const clip = (text) => (text.length > 30 ? `${text.slice(0, 30)}…` : text);
-      const headings = (result.outline || []).length;
-      const parts = [`已导入正文${headings ? `（识别 ${headings} 个标题/目录）` : ""}`];
-      if (result.title) parts.push(`识别标题「${clip(result.title)}」`);
-      if (result.summary) parts.push(`识别摘要「${clip(result.summary)}」`);
-      if (filled.length) parts.push(`已自动填入${filled.join("、")}`);
-      docImportStatus.textContent = `${parts.join("；")}。请检查后保存。`;
-      clearFileInput(form.docFile);
-
-      if (conflicts.length) {
-        const replace = await askReplace(conflicts);
-        if (replace) {
-          conflicts.forEach((item) => { form[item.field].value = item.detected; });
-          docImportStatus.textContent += " 已用识别结果替换。";
-        } else {
-          docImportStatus.textContent += ` ${conflicts.map((item) => item.label).join("、")}保留原内容。`;
-        }
-      }
-    }
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      flushPendingTag();
-
-      const payload = {
-        title: form.title.value.trim(),
-        summary: form.summary.value.trim(),
-        coverImage: form.coverImage.value.trim(),
-        videoUrl: form.videoUrl.value.trim(),
-        repoUrl: form.repoUrl.value.trim(),
-        content: form.content.value.trim(),
-        tags: currentTags,
-        status: isDraftInput.checked ? "draft" : "published",
-        pinned: isPinnedInput.checked
-      };
-
-      const method = editingId ? "PUT" : "POST";
-      const url = editingId ? `${API_BASE}/api/projects/${editingId}` : `${API_BASE}/api/projects`;
-
-      try {
-        const response = await authFetch(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const result = await parseJsonResponse(response);
-        if (!response.ok) {
-          throw new Error(result.message || "请求失败。");
-        }
-
-        resetForm(editingId ? "项目已更新。" : "项目已创建。");
-        await loadAdminProjects();
-      } catch (error) {
-        setMessage(error.message, true);
-      }
-    });
 
     statusFilter.addEventListener("click", (event) => {
       const btn = event.target.closest("button[data-status]");
@@ -1398,53 +511,6 @@
       renderProjects();
     });
 
-    resetButton.addEventListener("click", () => resetForm());
-    uploadVideoButton.addEventListener("click", async () => {
-      try {
-        await uploadSelectedVideo();
-      } catch (error) {
-        uploadStatus.textContent = error.message;
-        setMessage(error.message, true);
-      }
-    });
-
-    uploadCoverButton.addEventListener("click", async () => {
-      try {
-        await uploadSelectedImage();
-      } catch (error) {
-        coverUploadStatus.textContent = error.message;
-        setMessage(error.message, true);
-      }
-    });
-
-    coverImageInput.addEventListener("input", () => showCoverPreview(coverImageInput.value.trim()));
-
-    coverRemove.addEventListener("click", () => {
-      form.coverImage.value = "";
-      form.coverFile.value = "";
-      showCoverPreview("");
-      coverUploadStatus.textContent = DEFAULT_COVER_STATUS;
-      setMessage("已移除封面图片，可重新上传或粘贴链接。");
-    });
-
-    uploadContentImageButton.addEventListener("click", async () => {
-      try {
-        await uploadContentImage();
-      } catch (error) {
-        contentImageStatus.textContent = error.message;
-        setMessage(error.message, true);
-      }
-    });
-
-    importDocButton.addEventListener("click", async () => {
-      try {
-        await importDocument();
-      } catch (error) {
-        docImportStatus.textContent = error.message;
-        setMessage(error.message, true);
-      }
-    });
-
     logoutButton.addEventListener("click", async () => {
       try {
         await authFetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
@@ -1458,30 +524,6 @@
 
       const id = button.dataset.id;
       const action = button.dataset.action;
-
-      if (action === "edit") {
-        try {
-          const project = await fetchProject(id);
-          editingId = project.id;
-          formTitle.textContent = "编辑项目";
-          form.title.value = project.title;
-          form.summary.value = project.summary;
-          form.coverImage.value = project.coverImage;
-          form.videoUrl.value = project.videoUrl || "";
-          form.repoUrl.value = project.repoUrl || "";
-          form.content.value = project.content;
-          setTags(project.tags || []);
-          isDraftInput.checked = (project.status || "published") === "draft";
-          isPinnedInput.checked = Boolean(project.pinned);
-          showCoverPreview(project.coverImage);
-          coverUploadStatus.textContent = "当前封面已填入。你也可以重新上传本地图片覆盖它。";
-          uploadStatus.textContent = project.videoUrl ? "当前项目已绑定视频链接。你也可以重新上传本地视频覆盖它。" : "当前项目还没有视频。";
-          setMessage(`正在编辑《${project.title}》。`);
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } catch (error) {
-          setMessage(error.message, true);
-        }
-      }
 
       if (action === "pin" || action === "status") {
         const project = allAdminProjects.find((p) => p.id === id);
@@ -1521,41 +563,12 @@
           if (!response.ok) {
             throw new Error(result.message || "删除失败。");
           }
-          if (editingId === id) {
-            resetForm();
-          }
           setMessage("项目已删除。");
           await loadAdminProjects();
         } catch (error) {
           setMessage(error.message, true);
         }
       }
-    });
-
-    FILE_INPUT_IDS.forEach((id) => {
-      const input = document.getElementById(id);
-      if (input) setupDropzone(input);
-    });
-
-    tagField.addEventListener("keydown", (event) => {
-      if (["Enter", ",", "，", "、"].includes(event.key)) {
-        event.preventDefault();
-        flushPendingTag();
-      } else if (event.key === "Backspace" && !tagField.value && currentTags.length) {
-        removeTag(currentTags[currentTags.length - 1]);
-      }
-    });
-    tagField.addEventListener("blur", flushPendingTag);
-    tagChips.addEventListener("click", (event) => {
-      const btn = event.target.closest("button[data-tag]");
-      if (btn) removeTag(btn.dataset.tag);
-    });
-    TAG_SUGGESTIONS.forEach((suggestion) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = `+ ${suggestion}`;
-      button.addEventListener("click", () => addTag(suggestion));
-      tagSuggest.appendChild(button);
     });
 
     const visitorList = document.getElementById("visitor-list");
@@ -1657,7 +670,6 @@
 
     verifySession().then((ok) => {
       if (!ok) return;
-      resetForm();
       loadAdminProjects();
       loadVisitors();
     });
