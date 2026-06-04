@@ -29,7 +29,9 @@ const PUBLIC_INDEX = path.join(PUBLIC_DIR, "index.html");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+// 管理员账户（后台登录用）。默认即站长邮箱；可用环境变量 ADMIN_USERNAME 覆盖。
+// 全站只有这一个管理员账户，且只有它能在后台增删改内容（见各写接口的 requireAdmin）。
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "yannianyishou1@gmail.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET;
 const allowedOrigins = (process.env.CORS_ORIGIN || "")
