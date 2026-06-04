@@ -471,33 +471,15 @@ function verifyPassword(password, stored) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function hashCode(code) {
-  return crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(`code:${code}`).digest("hex");
-}
-
-function generateCode() {
-  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-}
-
-// 内存状态：待验证验证码 + 各类限流计数 + 一次性表单令牌
-const pendingCodes = new Map();
-const codeReqByIp = new Map();
-const codeReqByEmail = new Map();
+// 内存状态：各类限流计数 + 一次性表单令牌
+const registerByIp = new Map();
 const loginByKey = new Map();
 const usedFormTokens = new Map();
 const usedGrantTokens = new Map();
 const assistantByEmail = new Map();
-let globalCodeWindow = { start: Date.now(), count: 0 };
 
-const CODE_TTL_MS = 10 * 60 * 1000;
-const CODE_RESEND_COOLDOWN_MS = 60 * 1000;
-const CODE_MAX_ATTEMPTS = 6;
-const CODE_IP_WINDOW_MS = 60 * 60 * 1000;
-const CODE_IP_MAX = 8;
-const CODE_EMAIL_WINDOW_MS = 60 * 60 * 1000;
-const CODE_EMAIL_MAX = 4;
-const GLOBAL_CODE_WINDOW_MS = 60 * 60 * 1000;
-const GLOBAL_CODE_MAX = 80;
+const REGISTER_WINDOW_MS = 60 * 60 * 1000;
+const REGISTER_MAX = 8;
 const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_FAIL_MAX = 12;
 
@@ -514,8 +496,7 @@ function hitWindow(map, key, windowMs, max) {
 
 setInterval(() => {
   const now = Date.now();
-  for (const [k, v] of pendingCodes) if (now > v.expires) pendingCodes.delete(k);
-  for (const map of [codeReqByIp, codeReqByEmail, loginByKey]) {
+  for (const map of [registerByIp, loginByKey]) {
     for (const [k, v] of map) if (now - v.start > 60 * 60 * 1000) map.delete(k);
   }
   for (const [k, expiry] of usedFormTokens) if (now > expiry) usedFormTokens.delete(k);
@@ -594,14 +575,6 @@ async function verifyHuman(req) {
   }
 
   return verifyFormToken(req.body?.formToken);
-}
-
-// 是否为「已设密码」的真实注册用户。管理员手动添加的「待认领」会员（空密码占位）不算已注册，
-// 以便本人后续用该邮箱注册、认领账号并设置密码（保留会员有效期）。
-async function visitorIsRegistered(email) {
-  const { data, error } = await supabase.from("visitors").select("password_hash").eq("email", email).maybeSingle();
-  if (error) throw error;
-  return Boolean(data && data.password_hash);
 }
 
 // 会员判定（订阅制）：member_until 在未来则为有效会员（列未迁移时按非会员处理）。
@@ -817,6 +790,15 @@ function recordContactSend(req) {
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+// 注册仅允许常见邮箱服务商（Gmail / Outlook / QQ / 163），避免一次性邮箱注册。
+const ALLOWED_EMAIL_DOMAINS = new Set(["gmail.com", "outlook.com", "hotmail.com", "qq.com", "163.com"]);
+function isAllowedEmailDomain(value) {
+  const email = String(value || "").trim().toLowerCase();
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  return ALLOWED_EMAIL_DOMAINS.has(email.slice(at + 1));
 }
 
 function toListItem(project) {
@@ -1336,6 +1318,7 @@ app.get("/api/access/config", (req, res) => {
   const config = {
     turnstileSiteKey: TURNSTILE_SITE_KEY || null,
     emailConfigured: emailConfigured(),
+    contactEmail: CONTACT_TO,
   };
   if (!TURNSTILE_SITE_KEY) {
     config.formToken = issueFormToken();
@@ -1350,122 +1333,53 @@ app.get("/api/access/verify", async (req, res) => {
   return res.json({ authenticated: true, email: visitor.email, member: info.member, memberUntil: info.memberUntil });
 });
 
-app.post("/api/access/register/request-code", async (req, res) => {
+app.post("/api/access/register", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ message: "请输入有效的邮箱地址。" });
+  const password = String(req.body?.password || "");
+
+  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱格式不正确。" });
+  if (!isAllowedEmailDomain(email)) {
+    return res.status(400).json({ message: "仅支持 Gmail / Outlook / QQ / 163 邮箱注册。" });
   }
-  if (!emailConfigured()) {
-    return res.status(503).json({ message: "邮件服务未配置，暂时无法发送验证码。" });
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ message: "密码长度需为 8~128 位。" });
   }
 
   const ip = req.ip || "unknown";
-  if (!hitWindow(codeReqByIp, ip, CODE_IP_WINDOW_MS, CODE_IP_MAX)) {
-    return res.status(429).json({ message: "请求过于频繁，请稍后再试。" });
-  }
-  if (!hitWindow(codeReqByEmail, email, CODE_EMAIL_WINDOW_MS, CODE_EMAIL_MAX)) {
-    return res.status(429).json({ message: "该邮箱验证码请求过多，请稍后再试。" });
-  }
-
-  const now = Date.now();
-  if (now - globalCodeWindow.start > GLOBAL_CODE_WINDOW_MS) {
-    globalCodeWindow = { start: now, count: 0 };
-  }
-  if (globalCodeWindow.count >= GLOBAL_CODE_MAX) {
-    return res.status(429).json({ message: "系统繁忙，请稍后再试。" });
+  if (!hitWindow(registerByIp, ip, REGISTER_WINDOW_MS, REGISTER_MAX)) {
+    return res.status(429).json({ message: "注册过于频繁，请稍后再试。" });
   }
 
   if (!(await verifyHuman(req))) {
     return res.status(400).json({ message: "人机验证未通过，请重试。" });
   }
 
-  const existing = pendingCodes.get(email);
-  if (existing && now - existing.lastSent < CODE_RESEND_COOLDOWN_MS) {
-    return res.status(429).json({ message: "请稍后再请求验证码。" });
-  }
-
-  // 只拦截「已设密码」的真实注册用户；管理员手动添加的「待认领」账号（空密码占位）允许发码以便本人注册认领。
-  let registered;
   try {
-    registered = await visitorIsRegistered(email);
-  } catch (error) {
-    console.error("visitor lookup failed:", error.message);
-    return res.status(500).json({ message: "服务异常，请稍后再试。" });
-  }
-  if (registered) {
-    return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
-  }
-
-  const code = generateCode();
-  pendingCodes.set(email, { codeHash: hashCode(code), expires: now + CODE_TTL_MS, attempts: 0, lastSent: now });
-  globalCodeWindow.count += 1;
-
-  try {
-    await sendEmailMessage({
-      to: email,
-      subject: "你的注册验证码",
-      text: `你正在注册 Heisd.Stark 博客的项目访问账号。\n\n验证码：${code}\n\n10 分钟内有效。如果不是你本人操作，请忽略本邮件。`,
-    });
-  } catch (error) {
-    console.error("Failed to send access code:", error.message);
-    pendingCodes.delete(email);
-    return res.status(502).json({ message: "验证码发送失败，请稍后再试。" });
-  }
-
-  return res.json({ message: "验证码已发送，请查收邮箱。", cooldown: 60 });
-});
-
-app.post("/api/access/register", async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
-  const code = String(req.body?.code || "").trim();
-  const password = String(req.body?.password || "");
-
-  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱格式不正确。" });
-  if (!/^\d{6}$/.test(code)) return res.status(400).json({ message: "验证码格式不正确。" });
-  if (password.length < 8 || password.length > 128) {
-    return res.status(400).json({ message: "密码长度需为 8~128 位。" });
-  }
-
-  const pending = pendingCodes.get(email);
-  if (!pending || Date.now() > pending.expires) {
-    return res.status(400).json({ message: "验证码不存在或已过期，请重新获取。" });
-  }
-  if (pending.attempts >= CODE_MAX_ATTEMPTS) {
-    pendingCodes.delete(email);
-    return res.status(429).json({ message: "尝试次数过多，请重新获取验证码。" });
-  }
-  pending.attempts += 1;
-  if (!constantTimeEqual(hashCode(code), pending.codeHash)) {
-    return res.status(400).json({ message: "验证码不正确。" });
-  }
-
-  try {
-    // 可能存在「管理员手动添加的会员」：账号已建好但密码为空占位，此时允许本人注册认领并设置密码（保留会员有效期）。
+    // 仅允许「已获后台审批」的邮箱注册：管理员预先放行后会生成空密码占位账号，本人在此设置密码认领（保留会员有效期）。
     const { data: existing } = await supabase
       .from("visitors")
       .select("email, password_hash")
       .eq("email", email)
       .maybeSingle();
-    if (existing) {
-      if (existing.password_hash) {
-        pendingCodes.delete(email);
-        return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
-      }
-      const { error } = await supabase
-        .from("visitors")
-        .update({ password_hash: hashPassword(password) })
-        .eq("email", email);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("visitors").insert({ email, password_hash: hashPassword(password) });
-      if (error) throw error;
+    if (!existing) {
+      return res.status(403).json({
+        message: `该邮箱尚未获批。请先用此邮箱发邮件到 ${CONTACT_TO} 申请开通，管理员通过后即可在此设置密码完成注册。`,
+        fallbackEmail: CONTACT_TO,
+      });
     }
+    if (existing.password_hash) {
+      return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
+    }
+    const { error } = await supabase
+      .from("visitors")
+      .update({ password_hash: hashPassword(password) })
+      .eq("email", email);
+    if (error) throw error;
   } catch (error) {
     console.error("Register failed:", error.message);
     return res.status(500).json({ message: "注册失败，请稍后再试。" });
   }
 
-  pendingCodes.delete(email);
   return res.status(201).json({ token: createVisitorToken(email), email });
 });
 
@@ -1652,6 +1566,37 @@ app.post("/api/admin/grant", async (req, res) => {
     }
     console.error("Grant via link failed:", error.message);
     return res.status(500).json({ ok: false, message: "开通失败，请稍后再试或到后台手动操作。" });
+  }
+});
+
+// 后台：审批放行一个邮箱（建「待认领」普通账号，不开通会员）。
+// 用户用注册邮箱发邮件申请后，管理员在此放行；本人随后用该邮箱设置密码完成注册。
+app.post("/api/admin/visitors", requireAdmin, async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱不正确。" });
+  if (!isAllowedEmailDomain(email)) {
+    return res.status(400).json({ message: "仅支持 Gmail / Outlook / QQ / 163 邮箱。" });
+  }
+  try {
+    const { data: existing, error: selErr } = await supabase
+      .from("visitors")
+      .select("email, password_hash")
+      .eq("email", email)
+      .maybeSingle();
+    if (selErr) throw selErr;
+    if (existing) {
+      if (existing.password_hash) {
+        return res.status(409).json({ message: "该邮箱已注册。" });
+      }
+      // 已是「待认领」占位账号，视为已放行（幂等）。
+      return res.json({ email, pending: true, approved: true });
+    }
+    const { error } = await supabase.from("visitors").insert({ email, password_hash: "" });
+    if (error) throw error;
+    return res.status(201).json({ email, pending: true, approved: true });
+  } catch (error) {
+    console.error("Approve visitor failed:", error.message);
+    return res.status(500).json({ message: "放行失败，请稍后再试。", error: error.message });
   }
 });
 

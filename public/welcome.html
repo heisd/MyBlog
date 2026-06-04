@@ -197,14 +197,9 @@
       </form>
 
       <form id="register-form" class="auth-form" hidden novalidate>
+        <p class="hint reg-apply" id="reg-apply">注册需先审批：请先用你的注册邮箱发邮件向管理员申请，通过后用同一邮箱在此设置密码即可完成注册。仅支持 Gmail / Outlook / QQ / 163 邮箱。</p>
         <label>邮箱
           <input type="email" id="reg-email" autocomplete="email" required>
-        </label>
-        <label>验证码
-          <div class="code-row">
-            <input type="text" id="reg-code" inputmode="numeric" maxlength="6" placeholder="6 位验证码" autocomplete="one-time-code">
-            <button type="button" id="send-code" class="button button-secondary">发送验证码</button>
-          </div>
         </label>
         <label>设置密码（≥ 8 位）
           <input type="password" id="reg-password" autocomplete="new-password" required>
@@ -332,9 +327,12 @@
     async function initHuman() {
       try {
         const cfg = await (await fetch(`${API_BASE}/api/access/config`)).json();
-        if (!cfg.emailConfigured) {
-          document.getElementById("email-warn").textContent =
-            "提示：邮件服务尚未配置/未验证域名，注册验证码可能无法送达，请联系站长。";
+        if (cfg.contactEmail) {
+          const note = document.getElementById("reg-apply");
+          if (note) {
+            const mailto = `mailto:${cfg.contactEmail}?subject=${encodeURIComponent("申请注册博客访问账号")}&body=${encodeURIComponent("你好，我想申请注册（请用本邮箱发送本邮件）。")}`;
+            note.innerHTML = `注册需先审批：请用你的注册邮箱发邮件到 <a href="${mailto}">${cfg.contactEmail}</a> 申请，管理员通过后用同一邮箱在此设置密码即可完成注册。仅支持 Gmail / Outlook / QQ / 163 邮箱。`;
+          }
         }
         if (cfg.turnstileSiteKey) {
           turnstileEnabled = true;
@@ -360,49 +358,21 @@
       });
     });
 
-    // 发送验证码
-    const sendCodeBtn = document.getElementById("send-code");
-    let cooldownTimer = null;
-    function startCooldown(seconds) {
-      let left = seconds;
-      sendCodeBtn.disabled = true;
-      sendCodeBtn.textContent = `${left}s 后重发`;
-      cooldownTimer = setInterval(() => {
-        left -= 1;
-        if (left <= 0) { clearInterval(cooldownTimer); sendCodeBtn.disabled = false; sendCodeBtn.textContent = "发送验证码"; }
-        else sendCodeBtn.textContent = `${left}s 后重发`;
-      }, 1000);
+    // 允许注册的邮箱服务商（与后端保持一致）。
+    const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "outlook.com", "hotmail.com", "qq.com", "163.com"];
+    function emailDomainAllowed(email) {
+      const at = email.lastIndexOf("@");
+      return at >= 0 && ALLOWED_EMAIL_DOMAINS.includes(email.slice(at + 1).toLowerCase());
     }
 
-    sendCodeBtn.addEventListener("click", async () => {
-      const email = document.getElementById("reg-email").value.trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(regMsg, "请输入有效的邮箱地址。", "error"); return; }
-      setMsg(regMsg, "正在发送验证码…");
-      sendCodeBtn.disabled = true;
-      try {
-        const res = await fetch(`${API_BASE}/api/access/register/request-code`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, ...humanPayload("register") }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) { setMsg(regMsg, data.message || "发送失败，请稍后再试。", "error"); sendCodeBtn.disabled = false; resetTurnstile("register"); return; }
-        setMsg(regMsg, data.message || "验证码已发送，请查收邮箱。", "success");
-        startCooldown(data.cooldown || 60);
-        resetTurnstile("register");
-      } catch {
-        setMsg(regMsg, "网络异常，请稍后再试。", "error");
-        sendCodeBtn.disabled = false;
-      }
-    });
-
-    // 注册提交
+    // 注册提交（仅邮箱 + 密码；该邮箱需已由管理员审批放行）
     registerForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = document.getElementById("reg-email").value.trim();
-      const code = document.getElementById("reg-code").value.trim();
       const pw = document.getElementById("reg-password").value;
       const pw2 = document.getElementById("reg-password2").value;
-      if (!/^\d{6}$/.test(code)) { setMsg(regMsg, "请输入 6 位验证码。", "error"); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(regMsg, "请输入有效的邮箱地址。", "error"); return; }
+      if (!emailDomainAllowed(email)) { setMsg(regMsg, "仅支持 Gmail / Outlook / QQ / 163 邮箱。", "error"); return; }
       if (pw.length < 8) { setMsg(regMsg, "密码至少 8 位。", "error"); return; }
       if (pw !== pw2) { setMsg(regMsg, "两次输入的密码不一致。", "error"); return; }
       const submitBtn = registerForm.querySelector('button[type="submit"]');
@@ -411,16 +381,17 @@
       try {
         const res = await fetch(`${API_BASE}/api/access/register`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, code, password: pw }),
+          body: JSON.stringify({ email, password: pw, ...humanPayload("register") }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) { setMsg(regMsg, data.message || "注册失败。", "error"); submitBtn.disabled = false; return; }
+        if (!res.ok) { setMsg(regMsg, data.message || "注册失败。", "error"); submitBtn.disabled = false; resetTurnstile("register"); return; }
         localStorage.setItem(TOKEN_KEY, data.token);
         setMsg(regMsg, "注册成功，正在进入…", "success");
         leaveTo("/projects");
       } catch {
         setMsg(regMsg, "网络异常，请稍后再试。", "error");
         submitBtn.disabled = false;
+        resetTurnstile("register");
       }
     });
 
