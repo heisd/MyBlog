@@ -1178,6 +1178,7 @@
           editingId = result.id;
           history.replaceState(null, "", `/editor?id=${encodeURIComponent(result.id)}`);
         }
+        dirty = false; // 仅在保存成功后重置，失败时保留未保存提示
         showToast(status === "draft" ? "已保存为草稿。" : "已发布到前台。", "ok");
       } catch (err) {
         showToast(err.message, "error");
@@ -1198,8 +1199,6 @@
       event.preventDefault();
       event.returnValue = "";
     });
-    // 保存后重置 dirty
-    ["save-draft", "publish"].forEach((id) => $(id).addEventListener("click", () => { dirty = false; }));
 
     /* ===== 加载编辑数据 ===== */
     async function loadForEdit(id) {
