@@ -1409,7 +1409,9 @@ app.post("/api/access/register/request-code", async (req, res) => {
   } catch (error) {
     console.error("Failed to send access code:", error.message);
     pendingCodes.delete(email);
-    return res.status(502).json({ message: "验证码发送失败，请稍后再试。" });
+    // 把上游邮件服务（Brevo/Resend/SMTP）的具体报错透出，便于站长在前端直接看到
+    // 真正失败原因（如发件人未验证、账号待激活、API Key 失效等），免去翻服务器日志。
+    return res.status(502).json({ message: "验证码发送失败，请稍后再试。", detail: String(error.message || "").slice(0, 300) });
   }
 
   return res.json({ message: "验证码已发送，请查收邮箱。", cooldown: 60 });

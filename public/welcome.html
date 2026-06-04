@@ -385,7 +385,7 @@
           body: JSON.stringify({ email, ...humanPayload("register") }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) { setMsg(regMsg, data.message || "发送失败，请稍后再试。", "error"); sendCodeBtn.disabled = false; resetTurnstile("register"); return; }
+        if (!res.ok) { setMsg(regMsg, (data.message || "发送失败，请稍后再试。") + (data.detail ? `（原因：${data.detail}）` : ""), "error"); sendCodeBtn.disabled = false; resetTurnstile("register"); return; }
         setMsg(regMsg, data.message || "验证码已发送，请查收邮箱。", "success");
         startCooldown(data.cooldown || 60);
         resetTurnstile("register");
