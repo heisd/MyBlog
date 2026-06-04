@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章编辑器</title>
+  <!-- KaTeX：数学公式渲染（CDN，加载失败时公式降级为源码文本，不影响其它功能） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #eef2f7;
@@ -282,6 +286,16 @@
     .content pre code { background: none; padding: 0; color: inherit; }
     .content table { border-collapse: collapse; width: 100%; margin: 16px 0; }
     .content th, .content td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+    /* 特殊语法样式 */
+    .content ul.task-list { list-style: none; padding-left: 4px; }
+    .content .task-list-item { list-style: none; }
+    .content .task-list-item input { margin-right: 8px; vertical-align: middle; }
+    .content mark { background: #fff3a3; padding: 0 3px; border-radius: 3px; }
+    .content sup.footnote-ref a { text-decoration: none; color: var(--accent); }
+    .content .footnotes { margin-top: 30px; font-size: 0.9em; color: var(--muted); }
+    .content .footnotes hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+    .content .footnote-backref { text-decoration: none; }
+    .content .math-block { overflow-x: auto; text-align: center; }
 
     /* ===== 侧边栏 ===== */
     .sidebar {
@@ -540,6 +554,8 @@
       <button class="tool" type="button" data-code title="代码块">&lt;/&gt; 代码</button>
       <button class="tool" type="button" data-link title="链接">🔗 链接</button>
       <button class="tool" type="button" data-table title="表格">▦ 表格</button>
+      <button class="tool" type="button" data-task title="任务列表">☑ 任务</button>
+      <button class="tool" type="button" data-math title="数学公式">Σ 公式</button>
       <span class="tool-sep"></span>
       <button class="tool" type="button" id="tool-image" title="上传图片插入正文">🖼 图片</button>
       <button class="tool" type="button" id="tool-doc" title="导入文档到正文">📄 导入文档</button>
@@ -762,11 +778,29 @@
       if (btn) switchMode(btn.dataset.em);
     });
 
+    /* ===== KaTeX 数学公式渲染（可选增强，失败则降级显示源码） ===== */
+    function renderMath(el) {
+      if (!el || typeof window.renderMathInElement !== "function") return;
+      try {
+        window.renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+          ],
+          throwOnError: false,
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+        });
+      } catch (e) { /* 降级：保留源码 */ }
+    }
+
     /* ===== 实时预览 ===== */
     function syncPreview() {
       const html = getContentHtml().trim();
       previewContent.innerHTML = html || '<p class="preview-empty">正文预览会实时显示在这里。</p>';
+      renderMath(previewContent);
     }
+    // KaTeX 脚本异步加载完成后，补渲染一次预览
+    window.addEventListener("load", () => renderMath(previewContent));
     function syncTitlePreview() {
       previewTitle.textContent = titleEl.value.trim();
       titleCount.textContent = `${titleEl.value.length}/100`;
@@ -852,6 +886,16 @@
       if (tool.hasAttribute("data-table")) {
         if (md) insertIntoContent(`\n| 表头1 | 表头2 |\n| --- | --- |\n| 内容 | 内容 |\n`);
         else insertIntoContent(`\n<table>\n  <thead><tr><th>表头1</th><th>表头2</th></tr></thead>\n  <tbody>\n    <tr><td>内容</td><td>内容</td></tr>\n  </tbody>\n</table>\n`);
+        return;
+      }
+      if (tool.hasAttribute("data-task")) {
+        if (md) insertIntoContent(`\n- [ ] 待办事项\n- [x] 已完成\n`);
+        else insertIntoContent(`\n<ul class="task-list">\n  <li class="task-list-item"><input type="checkbox" disabled> 待办事项</li>\n  <li class="task-list-item"><input type="checkbox" disabled checked> 已完成</li>\n</ul>\n`);
+        return;
+      }
+      if (tool.hasAttribute("data-math")) {
+        // 数学公式两种模式通用：保留 $...$，由 KaTeX 渲染
+        wrapSelection("$", "$", "E=mc^2");
         return;
       }
     });
