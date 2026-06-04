@@ -685,6 +685,7 @@
     let editingId = new URLSearchParams(location.search).get("id");
     let currentTags = [];
     let editorMode = "html"; // 'html' | 'md'
+    let dirty = false; // 是否有未保存修改（含工具栏/上传/导入等程序化改动）
 
     const $ = (id) => document.getElementById(id);
     const titleEl = $("title");
@@ -709,6 +710,10 @@
         .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
     }
+
+    // 标记存在未保存修改。程序化修改内容/字段（工具栏、上传、导入、标签等）后调用，
+    // 因为这些不会触发 input 事件。加载期间的标记会被 init() 末尾的 dirty=false 清掉。
+    function markDirty() { dirty = true; }
 
     let toastTimer = null;
     function showToast(text, kind = "") {
@@ -830,6 +835,7 @@
       contentEl.focus();
       contentEl.setSelectionRange(caret, caret);
       syncPreview();
+      markDirty();
     }
     function wrapSelection(before, after, placeholder = "") {
       const start = contentEl.selectionStart ?? 0;
@@ -841,6 +847,7 @@
       contentEl.focus();
       contentEl.setSelectionRange(caret, caret);
       syncPreview();
+      markDirty();
     }
 
     const MD_WRAP = { strong: ["**", "**"], em: ["*", "*"], s: ["~~", "~~"] };
@@ -920,8 +927,9 @@
       if (!tag || currentTags.length >= 12 || currentTags.includes(tag)) return;
       currentTags.push(tag);
       renderTags();
+      markDirty();
     }
-    function removeTag(tag) { currentTags = currentTags.filter((t) => t !== tag); renderTags(); }
+    function removeTag(tag) { currentTags = currentTags.filter((t) => t !== tag); renderTags(); markDirty(); }
     function flushPendingTag() {
       if (tagField.value.trim()) { addTag(tagField.value); tagField.value = ""; }
     }
@@ -1012,6 +1020,7 @@
       $("coverFile").value = "";
       showCoverPreview("");
       $("cover-upload-status").textContent = "已移除封面，可重新上传或粘贴链接。";
+      markDirty();
     });
 
     /* ===== 上传：封面 / 视频 / 正文图片 ===== */
@@ -1030,6 +1039,7 @@
         showCoverPreview(result.imageUrl);
         statusEl.textContent = "封面上传成功，链接已自动填入。";
         clearFileInput($("coverFile"));
+        markDirty();
       } catch (error) { statusEl.textContent = error.message; showToast(error.message, "error"); }
     });
 
@@ -1047,6 +1057,7 @@
         videoUrlEl.value = result.videoUrl;
         statusEl.textContent = "视频上传成功，链接已自动填入。";
         clearFileInput($("videoFile"));
+        markDirty();
       } catch (error) { statusEl.textContent = error.message; showToast(error.message, "error"); }
     });
 
@@ -1189,11 +1200,11 @@
     $("save-draft").addEventListener("click", () => save("draft"));
     $("publish").addEventListener("click", () => save("published"));
 
-    // 离开前提醒（有内容且未保存路径下的轻提醒）
-    let dirty = false;
+    // 离开前提醒：直接输入的字段用 input 事件标脏；置顶用 change 事件。
     [titleEl, summaryEl, contentEl, coverImageEl, repoUrlEl, videoUrlEl].forEach((el) =>
-      el.addEventListener("input", () => { dirty = true; })
+      el.addEventListener("input", markDirty)
     );
+    isPinnedEl.addEventListener("change", markDirty);
     window.addEventListener("beforeunload", (event) => {
       if (!dirty) return;
       event.preventDefault();
