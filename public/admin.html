@@ -326,10 +326,11 @@
     </section>
 
     <section class="panel">
-      <h2>会员管理</h2>
-      <p class="hint">会员（订阅制 · 按月）可查看项目的私有 GitHub 链接、使用 AI 助手。管理员账号本身已拥有全部会员权限。点「+1 个月」授予或续费，点「取消会员」仅取消资格（保留账号），点「删除」彻底移除账号。</p>
+      <h2>会员管理 / 注册审批</h2>
+      <p class="hint">注册需审批：用户用注册邮箱发邮件申请后，在此输入其邮箱放行。「仅放行注册」建普通账号（可浏览，不含会员权益）；「添加为会员」同时开通会员。会员（订阅制 · 按月）可看私有 GitHub 链接、用 AI 助手。点「+1 个月」续费，「取消会员」仅取消资格（保留账号），「删除」彻底移除账号。仅支持 Gmail / Outlook / QQ / 163 邮箱。</p>
       <div class="visitor-add">
-        <input type="email" id="visitor-add-email" placeholder="手动添加会员：输入邮箱" autocomplete="off" />
+        <input type="email" id="visitor-add-email" placeholder="输入申请人邮箱" autocomplete="off" />
+        <button type="button" class="secondary" id="visitor-approve-btn">仅放行注册</button>
         <select id="visitor-add-months" aria-label="会员月数">
           <option value="1">1 个月</option>
           <option value="3">3 个月</option>
@@ -338,7 +339,7 @@
         </select>
         <button type="button" class="primary" id="visitor-add-btn">添加为会员</button>
       </div>
-      <p class="hint" style="margin:6px 0 14px;">手动添加的邮箱若尚未注册，会先建立一个「待认领」会员账号；本人用该邮箱注册并设置密码后即可登录，会员有效期保留。</p>
+      <p class="hint" style="margin:6px 0 14px;">放行/添加的邮箱若尚未注册，会先建立一个「待认领」账号；本人用该邮箱在登录页设置密码后即可登录（会员有效期保留）。</p>
       <div id="visitor-list" class="project-list">
         <div class="project-card"><p>正在加载…</p></div>
       </div>
@@ -637,6 +638,30 @@
         const result = await parseJsonResponse(response);
         if (!response.ok) throw new Error(result.message || "操作失败。");
         setMessage(action === "revoke" ? "已取消会员。" : "已授予 / 续费 1 个月会员。");
+        await loadVisitors();
+      } catch (error) {
+        setMessage(error.message, true);
+      }
+    });
+
+    // 仅放行注册（建「待认领」普通账号，不开通会员）
+    document.getElementById("visitor-approve-btn").addEventListener("click", async () => {
+      const emailEl = document.getElementById("visitor-add-email");
+      const email = (emailEl.value || "").trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        setMessage("请输入正确的邮箱。", true);
+        return;
+      }
+      try {
+        const response = await authFetch(`${API_BASE}/api/admin/visitors`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const result = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(result.message || "放行失败。");
+        emailEl.value = "";
+        setMessage("已放行该邮箱，本人可用它在登录页设置密码完成注册。");
         await loadVisitors();
       } catch (error) {
         setMessage(error.message, true);
