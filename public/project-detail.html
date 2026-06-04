@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目详情 | Heisd.Stark</title>
+  <!-- KaTeX：数学公式渲染（CDN，加载失败时公式降级为源码文本） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #f4efe7;
@@ -275,6 +279,16 @@
     .content pre code { background: none; padding: 0; }
     .content table { border-collapse: collapse; width: 100%; margin: 16px 0; }
     .content th, .content td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+    /* 特殊语法样式 */
+    .content ul.task-list { list-style: none; padding-left: 4px; }
+    .content .task-list-item { list-style: none; }
+    .content .task-list-item input { margin-right: 8px; vertical-align: middle; }
+    .content mark { background: #fff3a3; padding: 0 3px; border-radius: 3px; }
+    .content sup.footnote-ref a { text-decoration: none; color: var(--accent-dark); }
+    .content .footnotes { margin-top: 30px; font-size: 0.9em; color: var(--muted); }
+    .content .footnotes hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+    .content .footnote-backref { text-decoration: none; }
+    .content .math-block { overflow-x: auto; text-align: center; }
     .content nav.toc {
       background: rgba(255, 255, 255, 0.6);
       border: 1px solid var(--line);
@@ -572,6 +586,23 @@
         .replaceAll("'", "&#39;");
     }
 
+    // KaTeX 数学公式渲染（可选增强，失败/未加载则降级显示源码）
+    function renderMath(el) {
+      if (!el || typeof window.renderMathInElement !== "function") return;
+      try {
+        window.renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+          ],
+          throwOnError: false,
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+        });
+      } catch (e) { /* 降级：保留源码 */ }
+    }
+    // KaTeX 脚本异步加载完成后，补渲染一次正文
+    window.addEventListener("load", () => renderMath(document.querySelector(".content")));
+
     function delay(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
     }
@@ -686,6 +717,7 @@
           </article>
         `;
         buildToc();
+        renderMath(root.querySelector(".content"));
         setupPager(project.id);
         currentProjectId = project.id;
         const browseBtn = document.getElementById("browse-source");

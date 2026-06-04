@@ -17,6 +17,10 @@
       "destination": "/admin.html"
     },
     {
+      "source": "/editor",
+      "destination": "/editor.html"
+    },
+    {
       "source": "/admin-login",
       "destination": "/admin-login.html"
     },
