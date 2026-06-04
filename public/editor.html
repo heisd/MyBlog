@@ -173,6 +173,26 @@
       color: var(--ink);
       box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
     }
+    .mode-tabs {
+      display: inline-flex;
+      gap: 4px;
+      background: #e7f0ea;
+      border-radius: 9px;
+      padding: 3px;
+      flex: 0 0 auto;
+    }
+    .mode-tabs button {
+      border-radius: 7px;
+      padding: 5px 14px;
+      font-weight: 800;
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+    .mode-tabs button.active {
+      background: #fff;
+      color: var(--accent);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+    }
 
     /* ===== 主体：编辑区 + 侧边栏 ===== */
     .editor-body {
@@ -504,6 +524,11 @@
 
     <!-- 工具栏 -->
     <div class="toolbar" id="toolbar">
+      <div class="mode-tabs" id="mode-tabs" title="切换编辑模式（内容会自动转换）">
+        <button type="button" data-em="html" class="active">HTML</button>
+        <button type="button" data-em="md">Markdown</button>
+      </div>
+      <span class="tool-sep"></span>
       <button class="tool" type="button" data-h="2" title="标题">H</button>
       <button class="tool bold" type="button" data-wrap="strong" title="加粗">B</button>
       <button class="tool italic" type="button" data-wrap="em" title="斜体">I</button>
@@ -634,6 +659,7 @@
     </div>
   </div>
 
+  <script src="/assets/md-html.js"></script>
   <script>
     const API_BASE = "https://myblogbackend-njns.onrender.com";
     const AUTH_TOKEN_KEY = "adminToken";
@@ -642,6 +668,7 @@
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
     let editingId = new URLSearchParams(location.search).get("id");
     let currentTags = [];
+    let editorMode = "html"; // 'html' | 'md'
 
     const $ = (id) => document.getElementById(id);
     const titleEl = $("title");
@@ -703,9 +730,41 @@
       } catch { redirectToLogin(); return false; }
     }
 
+    /* ===== 编辑模式（HTML / Markdown）与转换 ===== */
+    const MD = window.MDHTML || null;
+    // 始终返回 HTML（最终保存格式）。Markdown 模式下转换后返回。
+    function getContentHtml() {
+      if (editorMode === "md" && MD) return MD.mdToHtml(contentEl.value);
+      return contentEl.value;
+    }
+    function updateContentPlaceholder() {
+      contentEl.placeholder =
+        editorMode === "md"
+          ? "在这里用 Markdown 撰写正文。支持 # 标题、**粗体**、- 列表、```代码块```、[链接](url)、![图片](url)、表格等；也可内嵌 HTML。"
+          : "在这里撰写正文（支持 HTML）。可使用上方工具栏快速插入标题、列表、代码块、图片等。";
+    }
+    function switchMode(mode) {
+      if (mode === editorMode) return;
+      if (!MD) { showToast("转换组件未加载，无法切换模式。", "error"); return; }
+      // 转换当前正文
+      contentEl.value =
+        mode === "md" ? MD.htmlToMd(contentEl.value) : MD.mdToHtml(contentEl.value);
+      editorMode = mode;
+      document.querySelectorAll("#mode-tabs button").forEach((b) =>
+        b.classList.toggle("active", b.dataset.em === mode)
+      );
+      updateContentPlaceholder();
+      syncPreview();
+      contentEl.focus();
+    }
+    document.getElementById("mode-tabs").addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-em]");
+      if (btn) switchMode(btn.dataset.em);
+    });
+
     /* ===== 实时预览 ===== */
     function syncPreview() {
-      const html = contentEl.value.trim();
+      const html = getContentHtml().trim();
       previewContent.innerHTML = html || '<p class="preview-empty">正文预览会实时显示在这里。</p>';
     }
     function syncTitlePreview() {
@@ -750,25 +809,49 @@
       syncPreview();
     }
 
+    const MD_WRAP = { strong: ["**", "**"], em: ["*", "*"], s: ["~~", "~~"] };
     $("toolbar").addEventListener("click", (event) => {
       const tool = event.target.closest(".tool");
       if (!tool) return;
-      if (tool.dataset.h) { wrapSelection(`<h${tool.dataset.h}>`, `</h${tool.dataset.h}>`, "标题"); return; }
-      if (tool.dataset.wrap) { wrapSelection(`<${tool.dataset.wrap}>`, `</${tool.dataset.wrap}>`, "文字"); return; }
-      if (tool.dataset.block) { wrapSelection(`<${tool.dataset.block}>`, `</${tool.dataset.block}>`, "引用内容"); return; }
-      if (tool.dataset.list) {
-        const tag = tool.dataset.list;
-        insertIntoContent(`\n<${tag}>\n  <li>列表项</li>\n  <li>列表项</li>\n</${tag}>\n`);
+      const md = editorMode === "md";
+
+      if (tool.dataset.h) {
+        const n = tool.dataset.h;
+        if (md) insertIntoContent(`\n${"#".repeat(+n)} 标题\n`);
+        else wrapSelection(`<h${n}>`, `</h${n}>`, "标题");
         return;
       }
-      if (tool.hasAttribute("data-code")) { insertIntoContent(`\n<pre><code>在这里粘贴代码</code></pre>\n`); return; }
+      if (tool.dataset.wrap) {
+        if (md) { const w = MD_WRAP[tool.dataset.wrap]; wrapSelection(w[0], w[1], "文字"); }
+        else wrapSelection(`<${tool.dataset.wrap}>`, `</${tool.dataset.wrap}>`, "文字");
+        return;
+      }
+      if (tool.dataset.block) {
+        if (md) insertIntoContent(`\n> 引用内容\n`);
+        else wrapSelection(`<blockquote>`, `</blockquote>`, "引用内容");
+        return;
+      }
+      if (tool.dataset.list) {
+        const tag = tool.dataset.list;
+        if (md) insertIntoContent(tag === "ul" ? `\n- 列表项\n- 列表项\n` : `\n1. 列表项\n2. 列表项\n`);
+        else insertIntoContent(`\n<${tag}>\n  <li>列表项</li>\n  <li>列表项</li>\n</${tag}>\n`);
+        return;
+      }
+      if (tool.hasAttribute("data-code")) {
+        if (md) insertIntoContent("\n```\n在这里粘贴代码\n```\n");
+        else insertIntoContent(`\n<pre><code>在这里粘贴代码</code></pre>\n`);
+        return;
+      }
       if (tool.hasAttribute("data-link")) {
         const url = prompt("请输入链接地址：", "https://");
-        if (url) wrapSelection(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener">`, "</a>", "链接文字");
+        if (!url) return;
+        if (md) wrapSelection("[", `](${url})`, "链接文字");
+        else wrapSelection(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener">`, "</a>", "链接文字");
         return;
       }
       if (tool.hasAttribute("data-table")) {
-        insertIntoContent(`\n<table>\n  <thead><tr><th>表头1</th><th>表头2</th></tr></thead>\n  <tbody>\n    <tr><td>内容</td><td>内容</td></tr>\n  </tbody>\n</table>\n`);
+        if (md) insertIntoContent(`\n| 表头1 | 表头2 |\n| --- | --- |\n| 内容 | 内容 |\n`);
+        else insertIntoContent(`\n<table>\n  <thead><tr><th>表头1</th><th>表头2</th></tr></thead>\n  <tbody>\n    <tr><td>内容</td><td>内容</td></tr>\n  </tbody>\n</table>\n`);
         return;
       }
     });
@@ -936,7 +1019,8 @@
           const response = await authFetch(`${API_BASE}/api/uploads/image`, { method: "POST", body: formData });
           const result = await parseJsonResponse(response);
           if (!response.ok) throw new Error(result.message || `「${file.name}」上传失败。`);
-          insertIntoContent(`\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`);
+          if (editorMode === "md") insertIntoContent(`\n![](${result.imageUrl})\n`);
+          else insertIntoContent(`\n<img src="${escapeHtml(result.imageUrl)}" alt="" style="max-width:100%;border-radius:8px;" />\n`);
           done += 1;
         }
         showToast(`已插入 ${done} 张图片。`, "ok");
@@ -977,7 +1061,9 @@
         const response = await authFetch(`${API_BASE}/api/uploads/document`, { method: "POST", body: formData });
         const result = await parseJsonResponse(response);
         if (!response.ok) throw new Error(result.message || "文档解析失败。");
-        insertIntoContent(result.html || "");
+        // 服务器返回 HTML；Markdown 模式下转换后再插入。
+        const imported = result.html || "";
+        insertIntoContent(editorMode === "md" && MD ? MD.htmlToMd(imported) : imported);
 
         const filled = [];
         const conflicts = [];
@@ -1011,7 +1097,7 @@
         coverImage: coverImageEl.value.trim(),
         videoUrl: videoUrlEl.value.trim(),
         repoUrl: repoUrlEl.value.trim(),
-        content: contentEl.value.trim(),
+        content: getContentHtml().trim(),
         tags: currentTags,
         status,
         pinned: isPinnedEl.checked,
@@ -1090,6 +1176,7 @@
     }
 
     (async function init() {
+      updateContentPlaceholder();
       const ok = await verifySession();
       if (!ok) return;
       try {
