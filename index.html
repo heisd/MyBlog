@@ -269,7 +269,7 @@
       letter-spacing: 0.04em;
     }
 
-    /* 钢铁侠模型（自包含 SVG 头盔 + 电弧反应堆，鼠标视差 3D 倾斜 + 悬浮）。 */
+    /* 钢铁侠全身模型（自包含 SVG，胸口电弧反应堆 + 发光眼，鼠标视差 3D 倾斜 + 悬浮）。 */
     .ironman {
       display: grid;
       justify-items: center;
@@ -284,29 +284,70 @@
     }
     .im-stage {
       position: relative;
-      width: 210px;
-      height: 250px;
+      width: 188px;
       transform-style: preserve-3d;
-      animation: im-float 5s ease-in-out infinite;
+      animation: im-float 5.5s ease-in-out infinite;
+      cursor: pointer;
     }
-    .im-helmet {
-      width: 210px;
-      height: 250px;
+    .im-figure {
+      width: 188px;
+      height: auto;
       display: block;
       transform: translateZ(0);
-      filter: drop-shadow(0 20px 28px rgba(68, 48, 30, 0.38));
+      filter: drop-shadow(0 22px 26px rgba(68, 48, 30, 0.36));
     }
-    .im-eye { animation: im-eye 3.6s ease-in-out infinite; transform-origin: center; }
-    .im-reactor {
+    .im-eye { animation: im-eye 3.6s ease-in-out infinite; }
+    .im-ring { transform-origin: 30px 30px; animation: arc-spin 9s linear infinite; }
+    .im-core { transform-origin: 30px 30px; animation: im-core-pulse 2.8s ease-in-out infinite; }
+    @keyframes im-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes im-eye { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+    @keyframes im-core-pulse {
+      0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 2px rgba(150, 230, 255, 0.7)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 7px rgba(150, 230, 255, 0.95)); }
+    }
+    /* 点击钢铁侠：眼睛闪光 */
+    @keyframes im-eye-flash {
+      0% { opacity: 1; filter: brightness(1); }
+      28% { opacity: 1; filter: brightness(2.6) drop-shadow(0 0 7px #cdeeff); }
+      100% { opacity: 0.85; filter: brightness(1); }
+    }
+    .im-figure.flash .im-eye { animation: im-eye-flash 680ms ease; }
+    /* 点击钢铁侠：弹出台词气泡 */
+    .im-quote {
       position: absolute;
       left: 50%;
-      bottom: -14px;
-      width: 56px;
-      height: 56px;
-      transform: translateX(-50%) translateZ(46px);
+      bottom: 100%;
+      transform: translateX(-50%) translateY(10px);
+      margin-bottom: 8px;
+      max-width: 220px;
+      width: max-content;
+      padding: 9px 13px;
+      background: #15161a;
+      color: #eaf6ff;
+      border: 1px solid #2f7fae;
+      border-radius: 12px;
+      box-shadow: 0 12px 26px rgba(15, 22, 30, 0.35);
+      font-size: 0.86rem;
+      line-height: 1.55;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease, transform 200ms ease;
+      z-index: 5;
     }
-    @keyframes im-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-    @keyframes im-eye { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+    .im-quote::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #15161a;
+    }
+    .im-quote.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
 
     .section-head {
       display: grid;
@@ -451,7 +492,10 @@
       .arc-reactor .ring-rotate,
       .arc-reactor .arc-core,
       .im-stage,
-      .im-eye {
+      .im-eye,
+      .im-ring,
+      .im-core,
+      .im-figure.flash .im-eye {
         animation: none;
       }
       .im-tilt {
@@ -491,84 +535,86 @@
       <aside class="hero-panel">
         <div class="ironman">
           <div class="im-tilt" id="im-tilt">
-            <div class="im-stage">
-              <svg class="im-helmet" viewBox="0 0 210 250" role="img" aria-label="钢铁侠头盔模型">
+            <div class="im-stage" id="im-stage" role="button" tabindex="0" aria-label="点击钢铁侠互动">
+              <div class="im-quote" id="im-quote" aria-live="polite"></div>
+              <svg class="im-figure" id="im-figure" viewBox="0 0 200 440" role="img" aria-label="钢铁侠 Mark 85 全身模型">
                 <defs>
-                  <linearGradient id="imGold" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#ffe9a8"/>
-                    <stop offset="38%" stop-color="#f4bd3e"/>
-                    <stop offset="72%" stop-color="#cf9421"/>
-                    <stop offset="100%" stop-color="#9c6b14"/>
-                  </linearGradient>
-                  <linearGradient id="imRed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#e74135"/>
-                    <stop offset="48%" stop-color="#c01d14"/>
-                    <stop offset="100%" stop-color="#7c0f08"/>
-                  </linearGradient>
-                  <radialGradient id="imEye" cx="50%" cy="50%" r="60%">
-                    <stop offset="0%" stop-color="#ffffff"/>
-                    <stop offset="55%" stop-color="#cdeeff"/>
-                    <stop offset="100%" stop-color="#6cc2f5"/>
-                  </radialGradient>
-                  <filter id="imEyeGlow" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="2.2" result="b"/>
-                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-                  </filter>
+                  <linearGradient id="imG" x1="0.15" y1="0" x2="0.45" y2="1"><stop offset="0%" stop-color="#ffeebf"/><stop offset="32%" stop-color="#f6c54b"/><stop offset="66%" stop-color="#d49a25"/><stop offset="100%" stop-color="#9a6912"/></linearGradient>
+                  <linearGradient id="imR" x1="0.15" y1="0" x2="0.4" y2="1"><stop offset="0%" stop-color="#e8463a"/><stop offset="45%" stop-color="#c11d14"/><stop offset="100%" stop-color="#7a0e07"/></linearGradient>
+                  <linearGradient id="imRd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b81a11"/><stop offset="100%" stop-color="#6c0c06"/></linearGradient>
                 </defs>
-                <!-- 头盔外形（红） -->
-                <path fill="url(#imRed)" stroke="#5e0a05" stroke-width="1.5"
-                  d="M105,16 C150,16 178,44 182,92 C184,128 176,160 156,196 C144,220 124,238 105,242 C86,238 66,220 54,196 C34,160 26,128 28,92 C32,44 60,16 105,16 Z"/>
-                <!-- 面罩（金） -->
-                <path fill="url(#imGold)" stroke="#7e5410" stroke-width="1.2"
-                  d="M105,46 C133,46 156,64 156,100 C156,132 149,162 133,192 C123,212 113,226 105,230 C97,226 87,212 77,192 C61,162 54,132 54,100 C54,64 77,46 105,46 Z"/>
-                <!-- 前额中线红条 -->
-                <polygon fill="url(#imRed)" stroke="#7e5410" stroke-width="0.6" points="100,48 110,48 108,104 102,104"/>
-                <!-- 眉骨（红，怒视） -->
-                <polygon fill="#a3160d" points="60,104 100,118 100,126 60,114"/>
-                <polygon fill="#a3160d" points="150,104 110,118 110,126 150,114"/>
-                <!-- 眼睛（发光） -->
-                <polygon class="im-eye" fill="url(#imEye)" filter="url(#imEyeGlow)" points="66,120 98,128 98,140 68,134"/>
-                <polygon class="im-eye" fill="url(#imEye)" filter="url(#imEyeGlow)" points="144,120 112,128 112,140 142,134"/>
-                <!-- 鼻梁高光 -->
-                <polygon fill="#ffe9a8" opacity="0.55" points="103,128 107,128 106,196 104,196"/>
-                <!-- 嘴部通风口 -->
-                <g stroke="#7e5410" stroke-width="2" stroke-linecap="round">
-                  <line x1="88" y1="196" x2="88" y2="212"/>
-                  <line x1="96" y1="198" x2="96" y2="214"/>
-                  <line x1="105" y1="199" x2="105" y2="215"/>
-                  <line x1="114" y1="198" x2="114" y2="214"/>
-                  <line x1="122" y1="196" x2="122" y2="212"/>
-                </g>
-                <!-- 脸颊分件线 -->
-                <path fill="none" stroke="#7e5410" stroke-width="1" opacity="0.6" d="M70,150 C84,170 94,184 104,206"/>
-                <path fill="none" stroke="#7e5410" stroke-width="1" opacity="0.6" d="M140,150 C126,170 116,184 106,206"/>
-                <!-- 左侧金属高光 -->
-                <path fill="#fff4d6" opacity="0.18" d="M105,46 C84,48 70,64 66,96 C72,72 86,56 105,52 Z"/>
-              </svg>
-              <div class="im-reactor" aria-hidden="true">
-                <svg class="arc-reactor" viewBox="0 0 60 60" style="width:56px;height:56px;" role="img" aria-label="电弧反应堆">
+                <!-- 地面阴影 -->
+                <ellipse cx="100" cy="426" rx="60" ry="9" fill="#000" opacity="0.10"/>
+                <!-- 颈部 -->
+                <path fill="url(#imRd)" d="M86,74 L114,74 L117,112 L83,112 Z"/>
+                <!-- 大腿（红） -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M82,256 C74,274 72,298 76,320 L96,322 L98,300 L99,258 Z"/>
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M118,256 C126,274 128,298 124,320 L104,322 L102,300 L101,258 Z"/>
+                <!-- 膝甲（金） -->
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="0.9" d="M76,316 L98,318 L98,338 L78,338 C74,330 74,323 76,316 Z"/>
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="0.9" d="M124,316 L102,318 L102,338 L122,338 C126,330 126,323 124,316 Z"/>
+                <!-- 小腿（红） -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M78,336 L98,336 L98,398 L84,402 C78,396 76,384 76,368 C76,352 76,342 78,336 Z"/>
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M122,336 L102,336 L102,398 L116,402 C122,396 124,384 124,368 C124,352 124,342 122,336 Z"/>
+                <!-- 靴（金） -->
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="1" d="M74,398 L98,398 L100,414 C100,421 92,425 82,425 L70,425 C66,421 66,410 70,404 Z"/>
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="1" d="M126,398 L102,398 L100,414 C100,421 108,425 118,425 L130,425 C134,421 134,410 130,404 Z"/>
+                <!-- 骨盆（红） -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M80,232 L120,232 L126,250 C124,260 114,266 100,266 C86,266 76,260 74,250 Z"/>
+                <!-- 腹甲（金，分段） -->
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="1" d="M78,188 L122,188 C126,198 126,212 122,224 L118,234 L82,234 L78,224 C74,212 74,198 78,188 Z"/>
+                <path fill="none" stroke="#7a5210" stroke-width="0.9" opacity="0.55" d="M82,202 L118,202 M84,216 L116,216 M100,188 L100,234"/>
+                <!-- 胸甲（红） -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.2" d="M60,108 C78,100 122,100 140,108 C146,124 146,142 140,158 L132,178 C126,188 116,194 100,194 C84,194 74,188 68,178 L60,158 C54,142 54,124 60,108 Z"/>
+                <path fill="none" stroke="#5a0a05" stroke-width="0.9" opacity="0.45" d="M100,110 L100,150 M70,150 Q86,166 100,168 Q114,166 130,150"/>
+                <!-- 肩甲 -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.2" d="M58,108 C44,100 28,104 22,118 C18,128 20,140 28,148 C36,154 50,154 60,148 Z"/>
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.2" d="M142,108 C156,100 172,104 178,118 C182,128 180,140 172,148 C164,154 150,154 140,148 Z"/>
+                <!-- 左臂：上臂红 / 护手金 / 拳红 -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M48,144 C38,152 32,168 32,188 C32,202 36,212 42,218 L54,214 L56,190 L58,150 Z"/>
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="1" d="M36,216 C34,230 36,246 42,256 L54,256 L56,234 L52,214 Z"/>
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1" d="M38,254 C33,258 33,268 40,272 C49,276 57,271 56,262 L54,253 Z"/>
+                <!-- 右臂 -->
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1.1" d="M152,144 C162,152 168,168 168,188 C168,202 164,212 158,218 L146,214 L144,190 L142,150 Z"/>
+                <path fill="url(#imG)" stroke="#7a5210" stroke-width="1" d="M164,216 C166,230 164,246 158,256 L146,256 L144,234 L148,214 Z"/>
+                <path fill="url(#imR)" stroke="#5a0a05" stroke-width="1" d="M162,254 C167,258 167,268 160,272 C151,276 143,271 144,262 L146,253 Z"/>
+                <!-- 头盔 -->
+                <svg x="67" y="10" width="66" height="78" viewBox="0 0 220 260">
                   <defs>
-                    <radialGradient id="imArcGlow" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stop-color="#eaffff"/>
-                      <stop offset="50%" stop-color="#9fe7ff"/>
-                      <stop offset="100%" stop-color="#2f7fae"/>
-                    </radialGradient>
+                    <linearGradient id="imHG" x1="0.1" y1="0" x2="0.42" y2="1"><stop offset="0%" stop-color="#ffeebf"/><stop offset="30%" stop-color="#f6c54b"/><stop offset="66%" stop-color="#d49a25"/><stop offset="100%" stop-color="#9a6912"/></linearGradient>
+                    <linearGradient id="imHR" x1="0.1" y1="0" x2="0.32" y2="1"><stop offset="0%" stop-color="#e8463a"/><stop offset="45%" stop-color="#c11d14"/><stop offset="100%" stop-color="#7a0e07"/></linearGradient>
+                    <linearGradient id="imHRd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b81a11"/><stop offset="100%" stop-color="#6c0c06"/></linearGradient>
+                    <radialGradient id="imEyeG" cx="50%" cy="45%" r="65%"><stop offset="0%" stop-color="#ffffff"/><stop offset="50%" stop-color="#e6f6ff"/><stop offset="100%" stop-color="#86cdf7"/></radialGradient>
+                    <filter id="imEyeF" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                   </defs>
-                  <circle cx="30" cy="30" r="27" fill="#1b1c20" stroke="#0e0f12" stroke-width="2"/>
-                  <g class="ring-rotate" style="transform-origin:30px 30px;">
-                    <circle cx="30" cy="30" r="21" fill="none" stroke="#7fd6ff" stroke-width="3" stroke-dasharray="3 5" opacity="0.9"/>
-                  </g>
-                  <circle cx="30" cy="30" r="14" fill="none" stroke="#bfefff" stroke-width="1.5" opacity="0.6"/>
-                  <g class="arc-core" style="transform-origin:30px 30px;">
-                    <circle cx="30" cy="30" r="9" fill="url(#imArcGlow)"/>
-                    <polygon points="30,24 35,33 25,33" fill="none" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round" opacity="0.9"/>
-                  </g>
+                  <path fill="url(#imHR)" stroke="#5a0a05" stroke-width="1.4" d="M110,18 C134,16 156,22 170,42 C180,58 183,78 182,98 C181,120 176,140 166,160 C156,178 146,194 130,206 C123,212 117,216 110,217 C103,216 97,212 90,206 C74,194 64,178 54,160 C44,140 39,120 38,98 C37,78 40,58 50,42 C64,22 86,16 110,18 Z"/>
+                  <path fill="url(#imHG)" stroke="#7a5210" stroke-width="1.1" d="M110,40 C131,39 149,46 158,66 C166,84 167,106 162,128 C157,148 149,166 138,184 C129,198 120,210 110,214 C100,210 91,198 82,184 C71,166 63,148 58,128 C53,106 54,84 62,66 C71,46 89,39 110,40 Z"/>
+                  <path fill="#000000" opacity="0.07" d="M110,40 C131,39 149,46 158,66 C166,84 167,106 162,128 C157,148 149,166 138,184 C129,198 120,210 110,214 L110,40 Z"/>
+                  <polygon fill="url(#imHRd)" points="104,42 116,42 114,88 106,88"/>
+                  <polygon fill="url(#imHRd)" points="106,88 114,88 110,99"/>
+                  <polygon fill="#9a150c" points="68,98 103,107 103,112 70,106"/>
+                  <polygon fill="#9a150c" points="152,98 117,107 117,112 150,106"/>
+                  <polygon class="im-eye" fill="url(#imEyeG)" filter="url(#imEyeF)" points="71,111 102,117 102,126 74,123"/>
+                  <polygon class="im-eye" fill="url(#imEyeG)" filter="url(#imEyeF)" points="149,111 118,117 118,126 146,123"/>
+                  <polygon fill="#ffeebf" opacity="0.5" points="107,119 113,119 112,170 108,170"/>
+                  <path fill="none" stroke="#7a5210" stroke-width="1.1" opacity="0.55" d="M74,138 C84,162 95,182 108,202"/>
+                  <path fill="none" stroke="#7a5210" stroke-width="1.1" opacity="0.55" d="M146,138 C136,162 125,182 112,202"/>
+                  <path fill="none" stroke="#7a5210" stroke-width="1.4" opacity="0.7" d="M92,186 Q110,194 128,186"/>
+                  <path fill="#fff6db" opacity="0.22" d="M110,40 C92,42 80,54 74,80 C81,58 94,48 110,45 Z"/>
                 </svg>
-              </div>
+                <!-- 胸口电弧反应堆 -->
+                <svg x="84" y="120" width="32" height="32" viewBox="0 0 60 60">
+                  <defs><radialGradient id="imReac" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#eaffff"/><stop offset="50%" stop-color="#9fe7ff"/><stop offset="100%" stop-color="#2f7fae"/></radialGradient></defs>
+                  <circle cx="30" cy="30" r="26" fill="#15161a" stroke="#0e0f12" stroke-width="2"/>
+                  <g class="im-ring"><circle cx="30" cy="30" r="20" fill="none" stroke="#7fd6ff" stroke-width="3" stroke-dasharray="3 5" opacity="0.9"/></g>
+                  <circle cx="30" cy="30" r="13" fill="none" stroke="#bfefff" stroke-width="1.4" opacity="0.6"/>
+                  <g class="im-core"><circle cx="30" cy="30" r="8.5" fill="url(#imReac)"/><polygon points="30,25 34,33 26,33" fill="none" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" opacity="0.9"/></g>
+                </svg>
+              </svg>
             </div>
           </div>
-          <div class="stark-label">Stark Industries</div>
-          <p class="stark-tagline">“我，就是钢铁侠。”</p>
+          <div class="stark-label">Stark Industries · Mark 85</div>
+          <p class="stark-tagline">点击钢铁侠 ⚡ 眼睛亮起，听他说一句</p>
         </div>
         <h2 class="hero-panel-title">欢迎来到我的博客</h2>
         <ul>
@@ -727,6 +773,40 @@
       });
       hero.addEventListener("pointerleave", function () {
         tilt.style.transform = "rotateY(0deg) rotateX(0deg)";
+      });
+    })();
+
+    // 点击钢铁侠：眼睛闪光 + 弹出一句台词（站点原创、贴合 Heisd.Stark 调性）。
+    (function () {
+      var stage = document.getElementById("im-stage");
+      var figure = document.getElementById("im-figure");
+      var quote = document.getElementById("im-quote");
+      if (!stage || !figure || !quote) return;
+      var lines = [
+        "我，就是 Heisd.Stark。",
+        "能用代码解决的，绝不动拳头。",
+        "反应堆满格，系统全部在线。",
+        "钢铁是外壳，里面的人才是英雄。",
+        "别眨眼 —— 接下来会很快。",
+        "搞工程的，顺手拯救一下世界。"
+      ];
+      var idx = 0, hideTimer = null;
+      function speak() {
+        figure.classList.remove("flash");
+        void figure.offsetWidth; // 重启动画
+        figure.classList.add("flash");
+        quote.textContent = lines[idx % lines.length];
+        idx += 1;
+        quote.classList.add("show");
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () { quote.classList.remove("show"); }, 2800);
+      }
+      figure.addEventListener("animationend", function (event) {
+        if (event.animationName === "im-eye-flash") figure.classList.remove("flash");
+      });
+      stage.addEventListener("click", speak);
+      stage.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); speak(); }
       });
     })();
   </script>
