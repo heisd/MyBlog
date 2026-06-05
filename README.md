@@ -92,6 +92,9 @@ ClaudeAboutWeb/
 - `/projects`：项目列表页（瀑布流卡片 + 关键词搜索 + 按关键词自动分类的标签筛选）
 - `/project/:id`：项目详情页
 - `/forum`：论坛页（登录用户发表文章 / 帖子并互相讨论）
+- `/space`：个人空间（用户自己的写作器，保存草稿或发布到论坛）
+- `/u/:username`：用户公开主页（头像 + 自我介绍 + 创作统计 + 关注 + TA 已发布的文章）
+- `/messages`：私信（与站内用户一对一收发消息）
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
@@ -100,6 +103,8 @@ ClaudeAboutWeb/
 
 - `/projects` -> `/projects.html`
 - `/forum` -> `/forum.html`
+- `/space` -> `/space.html`
+- `/u/:username` -> `/user.html?u=:username`
 - `/admin` -> `/admin.html`
 - `/project/:id` -> `/project-detail.html?id=:id`
 
@@ -225,24 +230,45 @@ ClaudeAboutWeb/
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/forum/posts` | 帖子列表（倒序、含每帖回复数）；需登录 |
-| `GET` | `/api/forum/posts/:id` | 帖子详情 + 全部回复；需登录 |
-| `POST` | `/api/forum/posts` | 发表新帖（`{title, content}`）；需登录且已设置用户名 |
+| `GET` | `/api/forum/posts/:id` | 帖子详情 + 全部回复（草稿仅作者/管理员可见）；需登录 |
+| `POST` | `/api/forum/posts` | 新建帖子（`{title, content, status}`，status=draft/published）；需登录且已设置用户名 |
+| `PUT` | `/api/forum/posts/:id` | 编辑自己的帖子（标题 / 正文 / 发布状态）；作者本人或管理员 |
 | `POST` | `/api/forum/posts/:id/replies` | 回复某帖（`{content}`）；需登录且已设置用户名 |
+| `POST` | `/api/forum/posts/:id/like` | 点赞 / 取消点赞（切换）；需登录 |
 | `DELETE` | `/api/forum/posts/:id` | 删除帖子（作者本人或管理员；回复随之级联删除） |
 | `DELETE` | `/api/forum/replies/:id` | 删除回复（作者本人或管理员） |
 
-- 正文与回复均按**纯文本**渲染（保留换行），前后端都做转义，避免 XSS。
-- 发帖 / 回复按**每账号每小时**限流（默认发帖 30、回复 120）。
-- 帖子作者以 `author_username` **冗余保存**，即使账号被删，历史内容仍保留署名。
+- 帖子正文支持**轻量 Markdown**（标题 / 加粗 / 斜体 / 列表 / 引用 / 代码 / 链接），由前端**安全渲染**（先整体转义、只引入受控标签、链接限定 http(s)），避免 XSS；回复按纯文本渲染。
+- 发帖 / 回复 / 点赞按**每账号每小时**限流；帖子作者以 `author_username` **冗余保存**，账号被删后历史内容仍保留署名。
+
+### 个人空间（`/space`）
+
+每个登录用户都有自己的写作空间，复用站内写作器（Markdown + 实时预览 + 格式工具栏）：
+
+- **写作即选择发布去向**：`保存到我的空间（草稿）` 仅自己可见；`发布到论坛` 则公开在 `/forum`。
+- 「我的文章」列表可**编辑、删除、在草稿 ↔ 已发布之间一键切换**。
+- **个人资料**：可设置**头像**（浏览器内压缩为 96px 方图存储）与**自我介绍**；头像 / 简介会显示在论坛的帖子与回复处。接口：`GET/POST /api/access/profile`。
+- **公开主页 + 关注**：论坛里点作者名片进入 `/u/:username`（头像 / 简介 / 文章 / 获赞 / 讨论 / 粉丝 / 关注），可**关注 / 取消关注**；个人空间「关注动态」展示所关注作者的最新文章。接口：`GET /api/users/:username`、`POST /api/users/:username/follow`、`GET /api/feed`。关注关系表见 [`data/migration-add-follows.sql`](data/migration-add-follows.sql)。
+- **私信（`/messages`）**：与站内用户一对一收发消息。**需互相关注**才能发送（用户主页仅互关时显示「✉ 私信」）；会话**每 5 秒实时刷新**、列表每 12 秒刷新；消息可**撤回**（发件人，双方移除）或**删除**（仅从自己一侧隐藏，两侧都删则彻底移除）；导航栏带**未读小红点**。接口：`POST /api/messages`（发送，校验互关）、`GET /api/messages`（会话列表）、`GET /api/messages/:username`（会话内容，自动已读，返回 `canMessage`）、`GET /api/messages/unread-count`、`DELETE /api/messages/:id`（`{scope:"recall"|"me"}`）。消息表见 [`data/migration-add-messages.sql`](data/migration-add-messages.sql)。仅普通账号可用（管理员无私信）。
+- 接口：`GET /api/forum/mine`（列出自己的全部文章，含草稿）、`GET /api/forum/mine/:id`（取回可编辑原文）。
+- 实现：帖子用 `status` 字段区分（`draft` / `published`）；论坛公开列表只查 `published`，草稿详情对非作者一律按「不存在」处理。
 
 ### 前置条件 ⚠️
 
-执行 [`data/migration-add-forum.sql`](data/migration-add-forum.sql)：给 `visitors` 加唯一 `username` 列，并新建 `forum_posts`、`forum_replies` 两张表。**未执行前**：注册接口会返回「请先执行 visitors.username 迁移」，论坛列表会提示需要初始化。
+执行 [`data/migration-add-forum.sql`](data/migration-add-forum.sql)：给 `visitors` 加唯一 `username` 列，新建 `forum_posts`、`forum_replies`、`forum_post_likes`，并给 `forum_posts` 加 `status` 列。**未执行前**：注册接口会返回「请先执行 visitors.username 迁移」，论坛/我的空间会提示需要初始化。
 
 ```sql
 alter table visitors add column if not exists username text;
 create unique index if not exists visitors_username_lower_idx on visitors (lower(username));
--- forum_posts / forum_replies 见迁移文件
+alter table forum_posts add column if not exists status text not null default 'published';
+-- forum_posts / forum_replies / forum_post_likes 及索引见迁移文件
+```
+
+个人资料（头像 / 自我介绍）另需执行 [`data/migration-add-profile.sql`](data/migration-add-profile.sql)：
+
+```sql
+alter table visitors add column if not exists avatar_url text;
+alter table visitors add column if not exists bio text;
 ```
 
 ## CORS 跨域配置

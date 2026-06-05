@@ -13,6 +13,18 @@
       "destination": "/forum.html"
     },
     {
+      "source": "/space",
+      "destination": "/space.html"
+    },
+    {
+      "source": "/u/:username",
+      "destination": "/user.html?u=:username"
+    },
+    {
+      "source": "/messages",
+      "destination": "/messages.html"
+    },
+    {
       "source": "/welcome",
       "destination": "/welcome.html"
     },

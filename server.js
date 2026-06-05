@@ -833,12 +833,40 @@ async function getUsername(email) {
   }
 }
 
+// 头像：允许清空、图片 data URL（客户端已压缩为小尺寸方图）或 https 链接，限长约 220KB。
+function isValidAvatar(value) {
+  if (!value) return true;
+  const s = String(value);
+  if (s.length > 300000) return false;
+  return /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/.test(s) || /^https:\/\/[^\s]+$/i.test(s);
+}
+
+// 批量取作者资料（用户名 → { avatar, bio }），供论坛展示头像；列/表缺失时静默降级为空。
+async function fetchAuthorProfiles(emails) {
+  const uniq = Array.from(new Set((emails || []).filter(Boolean)));
+  if (!uniq.length) return {};
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("username, avatar_url, bio")
+      .in("email", uniq);
+    if (error) return {};
+    const map = {};
+    for (const v of data || []) {
+      if (v.username) map[v.username] = { avatar: v.avatar_url || null, bio: v.bio || null };
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 // 论坛表尚未创建时的容错（未执行 forum 迁移）。
 // 42P01 = undefined_table；PGRST205 = 表不在 PostgREST schema cache。
 function isMissingForumTable(error) {
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;
-  return /forum_posts|forum_replies|forum_post_likes|does not exist|could not find the table/i.test(
+  return /forum_posts|forum_replies|forum_post_likes|forum_follows|forum_messages|does not exist|could not find the table/i.test(
     `${error.message || ""} ${error.details || ""}`
   );
 }
@@ -847,6 +875,11 @@ function isMissingForumTable(error) {
 function makeExcerpt(text, maxLen = 140) {
   const cleaned = String(text || "").replace(/\s+/g, " ").trim();
   return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen).trim()}…`;
+}
+
+// 帖子状态：draft（仅作者「我的空间」可见）/ published（公开在论坛）。
+function normalizeForumStatus(value) {
+  return value === "draft" ? "draft" : "published";
 }
 
 // 解析「当前发帖人」：登录访客取其用户名；管理员以站点管理员身份发帖。
@@ -1450,6 +1483,88 @@ app.post("/api/access/username", requireVisitor, async (req, res) => {
   } catch (error) {
     console.error("Set username failed:", error.message);
     return res.status(500).json({ message: "设置用户名失败，请稍后再试。" });
+  }
+});
+
+// 个人资料：读取（含头像 / 自我介绍）。
+app.get("/api/access/profile", requireVisitor, async (req, res) => {
+  if (!req.visitor) {
+    return res.json({ email: null, username: ADMIN_USERNAME, avatar: null, bio: null, isAdmin: true });
+  }
+  try {
+    let { data, error } = await supabase
+      .from("visitors")
+      .select("email, username, avatar_url, bio, member_until")
+      .eq("email", req.visitor.email)
+      .maybeSingle();
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("visitors")
+        .select("email, username, member_until")
+        .eq("email", req.visitor.email)
+        .maybeSingle());
+    }
+    if (error) throw error;
+    const memberUntil = data && data.member_until ? data.member_until : null;
+    return res.json({
+      email: data ? data.email : req.visitor.email,
+      username: data ? data.username || null : null,
+      avatar: data ? data.avatar_url || null : null,
+      bio: data ? data.bio || null : null,
+      member: memberUntil ? new Date(memberUntil).getTime() > Date.now() : false,
+      memberUntil,
+    });
+  } catch (error) {
+    console.error("Get profile failed:", error.message);
+    return res.status(500).json({ message: "加载资料失败，请稍后再试。" });
+  }
+});
+
+// 个人资料：更新头像 / 自我介绍（仅访客本人）。
+app.post("/api/access/profile", requireVisitor, async (req, res) => {
+  if (!req.visitor) {
+    return res.status(403).json({ message: "管理员资料无需在此设置。" });
+  }
+  if (!hitWindow(forumWriteByEmail, `profile:${req.visitor.email}`, FORUM_WINDOW_MS, 40)) {
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
+  }
+
+  const body = req.body || {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, "avatar")) {
+    const avatar = body.avatar ? String(body.avatar) : null;
+    if (avatar && !isValidAvatar(avatar)) {
+      return res.status(400).json({ message: "头像格式不支持或过大，请换一张图片（会自动压缩为小尺寸）。" });
+    }
+    patch.avatar_url = avatar;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "bio")) {
+    const bio = String(body.bio || "").trim();
+    if (bio.length > 500) return res.status(400).json({ message: "自我介绍不超过 500 字。" });
+    patch.bio = bio || null;
+  }
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ message: "没有要更新的内容。" });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .update(patch)
+      .eq("email", req.visitor.email)
+      .select("email, username, avatar_url, bio")
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors 头像 / 简介迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ message: "账号不存在。" });
+    return res.json({ email: data.email, username: data.username || null, avatar: data.avatar_url || null, bio: data.bio || null });
+  } catch (error) {
+    console.error("Update profile failed:", error.message);
+    return res.status(500).json({ message: "保存资料失败，请稍后再试。" });
   }
 });
 
@@ -2270,11 +2385,21 @@ setInterval(() => {
 // 帖子列表（含每帖回复数）。倒序，最多 200 条。
 app.get("/api/forum/posts", requireVisitor, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    // 公开论坛仅展示「已发布」帖子；草稿只在作者的「我的空间」可见。
+    let { data, error } = await supabase
       .from("forum_posts")
       .select("id, author_email, author_username, title, content, created_at, updated_at")
+      .neq("status", "draft")
       .order("created_at", { ascending: false })
       .limit(200);
+    // status 列未迁移时回退到不带过滤的查询（旧库全部视为已发布）。
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .select("id, author_email, author_username, title, content, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(200));
+    }
     if (error) {
       if (isMissingForumTable(error)) return res.json({ posts: [], needsMigration: true });
       throw error;
@@ -2307,7 +2432,9 @@ app.get("/api/forum/posts", requireVisitor, async (req, res) => {
     }
 
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    const authors = await fetchAuthorProfiles(posts.map((p) => p.author_email));
     return res.json({
+      authors,
       posts: posts.map((p) => ({
         id: p.id,
         authorUsername: p.author_username,
@@ -2341,6 +2468,13 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
 
+    const me = await getForumActor(req);
+    const isOwner = Boolean(me && (me.isAdmin || (me.email && post.author_email === me.email)));
+    // 草稿只对作者本人 / 管理员可见，其余一律按「不存在」处理。
+    if (post.status === "draft" && !isOwner) {
+      return res.status(404).json({ message: "帖子不存在。" });
+    }
+
     const { data: replies, error: repErr } = await supabase
       .from("forum_replies")
       .select("*")
@@ -2348,7 +2482,6 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
       .order("created_at", { ascending: true });
     if (repErr) throw repErr;
 
-    const me = await getForumActor(req);
     const { data: likes, error: likeErr } = await supabase
       .from("forum_post_likes")
       .select("user_key")
@@ -2359,16 +2492,20 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
     const liked = Boolean(me && likeRows.some((l) => l.user_key === me.key));
 
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    const authors = await fetchAuthorProfiles([post.author_email, ...(replies || []).map((r) => r.author_email)]);
     return res.json({
+      authors,
       post: {
         id: post.id,
         authorUsername: post.author_username,
         title: post.title,
         content: post.content,
+        status: post.status === "draft" ? "draft" : "published",
         createdAt: post.created_at,
         updatedAt: post.updated_at,
         likeCount,
         liked,
+        canEdit: isOwner,
         canDelete: canDelete(post.author_email),
       },
       replies: (replies || []).map((r) => ({
@@ -2394,21 +2531,32 @@ app.post("/api/forum/posts", requireVisitor, async (req, res) => {
   }
   const title = String(req.body?.title || "").trim();
   const content = String(req.body?.content || "").trim();
+  const status = normalizeForumStatus(req.body?.status);
   if (!title || !content) return res.status(400).json({ message: "请填写标题和内容。" });
   if (title.length > 120) return res.status(400).json({ message: "标题不超过 120 字。" });
   if (content.length > 20000) return res.status(400).json({ message: "内容过长（上限 20000 字）。" });
 
   const key = actor.email || "admin";
   if (!hitWindow(forumWriteByEmail, `post:${key}`, FORUM_WINDOW_MS, FORUM_POST_MAX)) {
-    return res.status(429).json({ message: "发帖过于频繁，请稍后再试。" });
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
   }
 
   try {
-    const { data, error } = await supabase
+    const row = { author_email: actor.email, author_username: actor.username, title, content, status };
+    let { data, error } = await supabase
       .from("forum_posts")
-      .insert({ author_email: actor.email, author_username: actor.username, title, content })
-      .select("id, author_username, title, content, created_at, updated_at")
+      .insert(row)
+      .select("id, author_username, title, content, status, created_at, updated_at")
       .single();
+    // status 列未迁移时去掉该字段重试（仍可创建，按已发布处理）。
+    if (error && isMissingColumn(error)) {
+      const { status: _omit, ...base } = row;
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .insert(base)
+        .select("id, author_username, title, content, created_at, updated_at")
+        .single());
+    }
     if (error) {
       if (isMissingForumTable(error)) {
         return res.status(409).json({ message: "论坛功能尚未初始化，请先在 Supabase 执行 forum 迁移。", code: "MIGRATION_REQUIRED" });
@@ -2420,14 +2568,704 @@ app.post("/api/forum/posts", requireVisitor, async (req, res) => {
       authorUsername: data.author_username,
       title: data.title,
       content: data.content,
+      status: data.status === "draft" ? "draft" : "published",
       createdAt: data.created_at,
       updatedAt: data.updated_at,
+      canEdit: true,
       canDelete: true,
     });
   } catch (error) {
     console.error("Create forum post failed:", error.message);
-    return res.status(500).json({ message: "发帖失败，请稍后再试。" });
+    return res.status(500).json({ message: "保存失败，请稍后再试。" });
   }
+});
+
+// 编辑自己的帖子（标题 / 正文 / 发布状态）。作者本人或管理员可改。
+app.put("/api/forum/posts/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  if (!actor.username) {
+    return res.status(403).json({ message: "请先设置用户名。", code: "USERNAME_REQUIRED" });
+  }
+  const title = String(req.body?.title || "").trim();
+  const content = String(req.body?.content || "").trim();
+  const status = normalizeForumStatus(req.body?.status);
+  if (!title || !content) return res.status(400).json({ message: "请填写标题和内容。" });
+  if (title.length > 120) return res.status(400).json({ message: "标题不超过 120 字。" });
+  if (content.length > 20000) return res.status(400).json({ message: "内容过长（上限 20000 字）。" });
+
+  try {
+    const { data: existing, error: selErr } = await supabase
+      .from("forum_posts")
+      .select("author_email")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (selErr) {
+      if (isMissingForumTable(selErr)) return res.status(404).json({ message: "帖子不存在。" });
+      throw selErr;
+    }
+    if (!existing) return res.status(404).json({ message: "帖子不存在。" });
+    if (!actor.isAdmin && !(actor.email && existing.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能编辑自己的文章。" });
+    }
+
+    const patch = { title, content, status, updated_at: new Date().toISOString() };
+    let { data, error } = await supabase
+      .from("forum_posts")
+      .update(patch)
+      .eq("id", req.params.id)
+      .select("id, author_username, title, content, status, created_at, updated_at")
+      .single();
+    if (error && isMissingColumn(error)) {
+      const { status: _omit, ...base } = patch;
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .update(base)
+        .eq("id", req.params.id)
+        .select("id, author_username, title, content, created_at, updated_at")
+        .single());
+    }
+    if (error) throw error;
+    return res.json({
+      id: data.id,
+      authorUsername: data.author_username,
+      title: data.title,
+      content: data.content,
+      status: data.status === "draft" ? "draft" : "published",
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      canEdit: true,
+      canDelete: true,
+    });
+  } catch (error) {
+    console.error("Update forum post failed:", error.message);
+    return res.status(500).json({ message: "保存失败，请稍后再试。" });
+  }
+});
+
+// 我的空间：列出当前用户自己的全部帖子（含草稿）。
+app.get("/api/forum/mine", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    let query = supabase
+      .from("forum_posts")
+      .select("id, author_email, author_username, title, content, status, created_at, updated_at")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    // 访客按邮箱归属；管理员归属为「无邮箱」的管理员帖子。
+    query = actor.isAdmin ? query.is("author_email", null) : query.eq("author_email", actor.email);
+    let { data, error } = await query;
+    if (error && isMissingColumn(error)) {
+      let q2 = supabase
+        .from("forum_posts")
+        .select("id, author_email, author_username, title, content, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(300);
+      q2 = actor.isAdmin ? q2.is("author_email", null) : q2.eq("author_email", actor.email);
+      ({ data, error } = await q2);
+    }
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ posts: [], needsMigration: true });
+      throw error;
+    }
+    const posts = data || [];
+    const counts = {};
+    const likeCounts = {};
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
+      if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
+      if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+    }
+    return res.json({
+      posts: posts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        status: p.status === "draft" ? "draft" : "published",
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("List my posts failed:", error.message);
+    return res.status(500).json({ message: "加载我的文章失败，请稍后再试。" });
+  }
+});
+
+// 获取自己某篇文章的可编辑原文（含草稿）。
+app.get("/api/forum/mine/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    const { data: post, error } = await supabase
+      .from("forum_posts")
+      .select("*")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "文章不存在。" });
+      throw error;
+    }
+    if (!post) return res.status(404).json({ message: "文章不存在。" });
+    if (!actor.isAdmin && !(actor.email && post.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能编辑自己的文章。" });
+    }
+    return res.json({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      status: post.status === "draft" ? "draft" : "published",
+      createdAt: post.created_at,
+      updatedAt: post.updated_at,
+    });
+  } catch (error) {
+    console.error("Read my post failed:", error.message);
+    return res.status(500).json({ message: "加载文章失败，请稍后再试。" });
+  }
+});
+
+// 用户公开主页：头像 + 自我介绍 + TA 已发布的文章（需登录查看）。
+app.get("/api/users/:username", requireVisitor, async (req, res) => {
+  const username = String(req.params.username || "").trim();
+  if (!username) return res.status(404).json({ message: "用户不存在。" });
+  try {
+    let { data: v, error: vErr } = await supabase
+      .from("visitors")
+      .select("email, username, avatar_url, bio, created_at")
+      .eq("username", username)
+      .maybeSingle();
+    if (vErr && isMissingColumn(vErr)) {
+      ({ data: v, error: vErr } = await supabase
+        .from("visitors")
+        .select("email, username, created_at")
+        .eq("username", username)
+        .maybeSingle());
+    }
+    if (vErr) throw vErr;
+    if (!v) return res.status(404).json({ message: "用户不存在。" });
+
+    let { data: posts, error: pErr } = await supabase
+      .from("forum_posts")
+      .select("id, title, content, created_at")
+      .eq("author_username", v.username)
+      .neq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (pErr && isMissingColumn(pErr)) {
+      ({ data: posts, error: pErr } = await supabase
+        .from("forum_posts")
+        .select("id, title, content, created_at")
+        .eq("author_username", v.username)
+        .order("created_at", { ascending: false })
+        .limit(100));
+    }
+    if (pErr) {
+      if (isMissingForumTable(pErr)) posts = [];
+      else throw pErr;
+    }
+    posts = posts || [];
+
+    const counts = {};
+    const likeCounts = {};
+    let totalReplies = 0;
+    let totalLikes = 0;
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
+      if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
+      if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+      for (const p of posts) { totalReplies += counts[p.id] || 0; totalLikes += likeCounts[p.id] || 0; }
+    }
+
+    // 关注信息（关注表未迁移时全部按 0 / false 降级）。
+    const viewerEmail = req.visitor ? req.visitor.email : null;
+    const isSelf = Boolean(viewerEmail && v.email && viewerEmail === v.email);
+    let followers = 0, followingCount = 0, isFollowing = false, followsYou = false;
+    try {
+      const fc = await supabase.from("forum_follows").select("*", { count: "exact", head: true }).eq("following_username", v.username);
+      if (!fc.error) followers = fc.count || 0;
+      if (v.email) {
+        const gc = await supabase.from("forum_follows").select("*", { count: "exact", head: true }).eq("follower_email", v.email);
+        if (!gc.error) followingCount = gc.count || 0;
+      }
+      if (viewerEmail && !isSelf) {
+        const { data: rel } = await supabase.from("forum_follows").select("follower_email").eq("follower_email", viewerEmail).eq("following_username", v.username).maybeSingle();
+        isFollowing = !!rel;
+        const viewerUsername = await getUsername(viewerEmail);
+        if (viewerUsername && v.email) {
+          const { data: rel2 } = await supabase.from("forum_follows").select("follower_email").eq("follower_email", v.email).eq("following_username", viewerUsername).maybeSingle();
+          followsYou = !!rel2;
+        }
+      }
+    } catch {}
+    const isMutual = isFollowing && followsYou;
+
+    return res.json({
+      user: {
+        username: v.username,
+        avatar: v.avatar_url || null,
+        bio: v.bio || null,
+        joinedAt: v.created_at || null,
+        postCount: posts.length,
+        totalLikes,
+        totalReplies,
+        followers,
+        following: followingCount,
+        isFollowing,
+        followsYou,
+        isMutual,
+        isSelf,
+        canFollow: Boolean(viewerEmail && !isSelf),
+        canMessage: Boolean(viewerEmail && !isSelf && isMutual),
+      },
+      posts: posts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        createdAt: p.created_at,
+        replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("Get user profile failed:", error.message);
+    return res.status(500).json({ message: "加载用户主页失败，请稍后再试。" });
+  }
+});
+
+// 关注 / 取消关注（切换）。仅登录访客可操作，不能关注自己。
+app.post("/api/users/:username/follow", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再关注。" });
+  const username = String(req.params.username || "").trim();
+  if (!username) return res.status(404).json({ message: "用户不存在。" });
+  if (!hitWindow(forumWriteByEmail, `follow:${req.visitor.email}`, FORUM_WINDOW_MS, 200)) {
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
+  }
+  try {
+    const { data: target, error: tErr } = await supabase
+      .from("visitors").select("email, username").eq("username", username).maybeSingle();
+    if (tErr) throw tErr;
+    if (!target) return res.status(404).json({ message: "用户不存在。" });
+    if (target.email === req.visitor.email) return res.status(400).json({ message: "不能关注自己。" });
+
+    const { data: existing, error: eErr } = await supabase
+      .from("forum_follows")
+      .select("follower_email")
+      .eq("follower_email", req.visitor.email)
+      .eq("following_username", target.username)
+      .maybeSingle();
+    if (eErr) {
+      if (isMissingForumTable(eErr)) return res.status(409).json({ message: "关注功能尚未初始化，请先在 Supabase 执行 follows 迁移。", code: "MIGRATION_REQUIRED" });
+      throw eErr;
+    }
+
+    let following;
+    if (existing) {
+      const { error } = await supabase.from("forum_follows").delete()
+        .eq("follower_email", req.visitor.email).eq("following_username", target.username);
+      if (error) throw error;
+      following = false;
+    } else {
+      const { error } = await supabase.from("forum_follows")
+        .insert({ follower_email: req.visitor.email, following_username: target.username });
+      if (error && error.code !== "23505") throw error;
+      following = true;
+    }
+    const { count } = await supabase.from("forum_follows")
+      .select("*", { count: "exact", head: true }).eq("following_username", target.username);
+    return res.json({ following, followers: count || 0 });
+  } catch (error) {
+    console.error("Follow toggle failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
+// 关注动态：我关注的人最新发布的文章。
+app.get("/api/feed", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ posts: [], authors: {} }); // 管理员无关注流
+  try {
+    const { data: follows, error: fErr } = await supabase
+      .from("forum_follows").select("following_username").eq("follower_email", req.visitor.email);
+    if (fErr) {
+      if (isMissingForumTable(fErr)) return res.json({ posts: [], authors: {}, needsMigration: true });
+      throw fErr;
+    }
+    const names = (follows || []).map((f) => f.following_username);
+    if (!names.length) return res.json({ posts: [], authors: {} });
+
+    let { data: posts, error: pErr } = await supabase
+      .from("forum_posts")
+      .select("id, author_email, author_username, title, content, created_at")
+      .in("author_username", names)
+      .neq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (pErr && isMissingColumn(pErr)) {
+      ({ data: posts, error: pErr } = await supabase
+        .from("forum_posts")
+        .select("id, author_email, author_username, title, content, created_at")
+        .in("author_username", names)
+        .order("created_at", { ascending: false })
+        .limit(50));
+    }
+    if (pErr) throw pErr;
+    posts = posts || [];
+
+    const counts = {};
+    const likeCounts = {};
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
+      if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
+      if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+    }
+    const authors = await fetchAuthorProfiles(posts.map((p) => p.author_email));
+    return res.json({
+      authors,
+      posts: posts.map((p) => ({
+        id: p.id,
+        authorUsername: p.author_username,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        createdAt: p.created_at,
+        replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("Feed failed:", error.message);
+    return res.status(500).json({ message: "加载关注动态失败，请稍后再试。" });
+  }
+});
+
+// ===== 私信（1 对 1 直接消息）=====
+
+// 按用户名取账号（含资料），用于私信寻址。
+async function getVisitorByUsername(username) {
+  let { data, error } = await supabase
+    .from("visitors").select("email, username, avatar_url, bio").eq("username", username).maybeSingle();
+  if (error && isMissingColumn(error)) {
+    ({ data, error } = await supabase.from("visitors").select("email, username").eq("username", username).maybeSingle());
+  }
+  if (error) throw error;
+  return data || null;
+}
+
+// 是否互相关注（私信门禁）：A→B 且 B→A 都存在。follows 表缺失或任一方缺失则视为否。
+async function mutualFollow(emailA, usernameA, emailB, usernameB) {
+  if (!emailA || !emailB || !usernameA || !usernameB) return false;
+  try {
+    const aToB = await supabase.from("forum_follows")
+      .select("follower_email", { count: "exact", head: true })
+      .eq("follower_email", emailA).eq("following_username", usernameB);
+    if (aToB.error) { if (isMissingForumTable(aToB.error)) return false; throw aToB.error; }
+    if (!aToB.count) return false;
+    const bToA = await supabase.from("forum_follows")
+      .select("follower_email", { count: "exact", head: true })
+      .eq("follower_email", emailB).eq("following_username", usernameA);
+    if (bToA.error) { if (isMissingForumTable(bToA.error)) return false; throw bToA.error; }
+    return (bToA.count || 0) > 0;
+  } catch (error) {
+    console.error("mutualFollow failed:", error.message);
+    return false;
+  }
+}
+
+// 私信实时推送（SSE）：email -> 该用户所有打开的连接。
+const sseClients = new Map();
+function sseSend(email, event, dataObj) {
+  const set = sseClients.get(email);
+  if (!set || !set.size) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(dataObj || {})}\n\n`;
+  for (const res of set) {
+    try { res.write(payload); } catch {}
+  }
+}
+
+// 发送私信。
+app.post("/api/messages", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再发私信。" });
+  const to = String(req.body?.to || "").trim();
+  const content = String(req.body?.content || "").trim();
+  if (!to) return res.status(400).json({ message: "缺少收件人。" });
+  if (!content) return res.status(400).json({ message: "请填写私信内容。" });
+  if (content.length > 4000) return res.status(400).json({ message: "私信内容过长（上限 4000 字）。" });
+  if (!hitWindow(forumWriteByEmail, `dm:${req.visitor.email}`, FORUM_WINDOW_MS, 120)) {
+    return res.status(429).json({ message: "发送过于频繁，请稍后再试。" });
+  }
+  try {
+    const peer = await getVisitorByUsername(to);
+    if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
+    if (peer.email === req.visitor.email) return res.status(400).json({ message: "不能给自己发私信。" });
+    // 私信门禁：需互相关注。
+    const myUsername = await getUsername(req.visitor.email);
+    if (!myUsername) return res.status(403).json({ message: "请先设置用户名。", code: "USERNAME_REQUIRED" });
+    if (!(await mutualFollow(req.visitor.email, myUsername, peer.email, peer.username))) {
+      return res.status(403).json({ message: "需要与对方互相关注后才能发私信。", code: "NOT_MUTUAL" });
+    }
+    const { data, error } = await supabase
+      .from("forum_messages")
+      .insert({ sender_email: req.visitor.email, recipient_email: peer.email, content })
+      .select("id, content, created_at")
+      .single();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(409).json({ message: "私信功能尚未初始化，请先在 Supabase 执行 messages 迁移。", code: "MIGRATION_REQUIRED" });
+      throw error;
+    }
+    sseSend(peer.email, "message", { from: myUsername }); // 实时推给对方
+    return res.status(201).json({ id: data.id, content: data.content, createdAt: data.created_at, mine: true });
+  } catch (error) {
+    console.error("Send message failed:", error.message);
+    return res.status(500).json({ message: "发送失败，请稍后再试。" });
+  }
+});
+
+// 会话列表：与我相关的每个对话方的最新一条 + 未读数。
+app.get("/api/messages", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ conversations: [] });
+  const me = req.visitor.email;
+  try {
+    let { data, error } = await supabase
+      .from("forum_messages")
+      .select("sender_email, recipient_email, content, created_at, read_at, deleted_by_sender, deleted_by_recipient")
+      .or(`sender_email.eq.${me},recipient_email.eq.${me}`)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_messages")
+        .select("sender_email, recipient_email, content, created_at, read_at")
+        .or(`sender_email.eq.${me},recipient_email.eq.${me}`)
+        .order("created_at", { ascending: false })
+        .limit(500));
+    }
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ conversations: [], needsMigration: true });
+      throw error;
+    }
+    // 过滤掉「我已删除」的消息（不影响对方）。
+    const rows = (data || []).filter((m) =>
+      !((m.sender_email === me && m.deleted_by_sender) || (m.recipient_email === me && m.deleted_by_recipient))
+    );
+    const byPeer = new Map();
+    for (const m of rows) {
+      const peer = m.sender_email === me ? m.recipient_email : m.sender_email;
+      if (!byPeer.has(peer)) {
+        byPeer.set(peer, { peerEmail: peer, lastContent: m.content, lastAt: m.created_at, mine: m.sender_email === me, unread: 0 });
+      }
+      if (m.recipient_email === me && !m.read_at) {
+        byPeer.get(peer).unread += 1;
+      }
+    }
+    // 解析对话方资料
+    const peers = Array.from(byPeer.keys());
+    const profiles = {};
+    if (peers.length) {
+      let pr = await supabase.from("visitors").select("email, username, avatar_url").in("email", peers);
+      if (pr.error && isMissingColumn(pr.error)) pr = await supabase.from("visitors").select("email, username").in("email", peers);
+      if (!pr.error) for (const v of pr.data || []) profiles[v.email] = { username: v.username || null, avatar: v.avatar_url || null };
+    }
+    const conversations = Array.from(byPeer.values())
+      .map((c) => ({
+        username: (profiles[c.peerEmail] && profiles[c.peerEmail].username) || null,
+        avatar: (profiles[c.peerEmail] && profiles[c.peerEmail].avatar) || null,
+        lastMessage: makeExcerpt(c.lastContent, 60),
+        lastAt: c.lastAt,
+        mine: c.mine,
+        unread: c.unread,
+      }))
+      .filter((c) => c.username) // 对方账号还在
+      .sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
+    return res.json({ conversations });
+  } catch (error) {
+    console.error("List conversations failed:", error.message);
+    return res.status(500).json({ message: "加载私信失败，请稍后再试。" });
+  }
+});
+
+// 未读私信总数（导航栏小红点用）。
+app.get("/api/messages/unread-count", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ count: 0 });
+  try {
+    const { count, error } = await supabase
+      .from("forum_messages")
+      .select("*", { count: "exact", head: true })
+      .eq("recipient_email", req.visitor.email)
+      .is("read_at", null);
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ count: 0 });
+      throw error;
+    }
+    return res.json({ count: count || 0 });
+  } catch (error) {
+    console.error("Unread count failed:", error.message);
+    return res.json({ count: 0 });
+  }
+});
+
+// 与某人的会话内容 + 将对方发来的未读标记为已读。
+app.get("/api/messages/:username", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后查看私信。" });
+  const me = req.visitor.email;
+  try {
+    const peer = await getVisitorByUsername(String(req.params.username || "").trim());
+    if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
+    if (peer.email === me) return res.status(400).json({ message: "这是你自己。" });
+
+    let { data, error } = await supabase
+      .from("forum_messages")
+      .select("id, sender_email, content, created_at, deleted_by_sender, deleted_by_recipient")
+      .in("sender_email", [me, peer.email])
+      .in("recipient_email", [me, peer.email])
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_messages")
+        .select("id, sender_email, content, created_at")
+        .in("sender_email", [me, peer.email])
+        .in("recipient_email", [me, peer.email])
+        .order("created_at", { ascending: true })
+        .limit(500));
+    }
+    if (error) {
+      if (isMissingForumTable(error)) {
+        const myU0 = await getUsername(me);
+        const canMsg0 = await mutualFollow(me, myU0, peer.email, peer.username);
+        return res.json({ peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null }, messages: [], canMessage: canMsg0 });
+      }
+      throw error;
+    }
+
+    // 标记对方发来的未读为已读（不阻塞返回）。
+    supabase.from("forum_messages").update({ read_at: new Date().toISOString() })
+      .eq("recipient_email", me).eq("sender_email", peer.email).is("read_at", null)
+      .then(() => {}, () => {});
+
+    // 过滤掉「我已删除」的消息（仅影响我这一侧）。
+    const visible = (data || []).filter((m) =>
+      !((m.sender_email === me && m.deleted_by_sender) || (m.sender_email !== me && m.deleted_by_recipient))
+    );
+    const myU = await getUsername(me);
+    const canMessage = await mutualFollow(me, myU, peer.email, peer.username);
+
+    return res.json({
+      peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null },
+      canMessage,
+      messages: visible.map((m) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_email === me })),
+    });
+  } catch (error) {
+    console.error("Read conversation failed:", error.message);
+    return res.status(500).json({ message: "加载会话失败，请稍后再试。" });
+  }
+});
+
+// 撤回（发件人，双方移除）/ 删除（仅从自己一侧隐藏；两侧都删则彻底移除）。
+app.delete("/api/messages/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录。" });
+  const me = req.visitor.email;
+  const scope = String(req.body?.scope || "me");
+  try {
+    let { data: m, error } = await supabase
+      .from("forum_messages")
+      .select("id, sender_email, recipient_email, deleted_by_sender, deleted_by_recipient")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error && isMissingColumn(error)) {
+      ({ data: m, error } = await supabase
+        .from("forum_messages")
+        .select("id, sender_email, recipient_email")
+        .eq("id", req.params.id)
+        .maybeSingle());
+    }
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "消息不存在。" });
+      throw error;
+    }
+    if (!m) return res.status(404).json({ message: "消息不存在。" });
+
+    const isSender = m.sender_email === me;
+    const isRecipient = m.recipient_email === me;
+    if (!isSender && !isRecipient) return res.status(403).json({ message: "无权操作这条消息。" });
+
+    if (scope === "recall") {
+      if (!isSender) return res.status(403).json({ message: "只能撤回自己发送的消息。" });
+      const { error: dErr } = await supabase.from("forum_messages").delete().eq("id", m.id);
+      if (dErr) throw dErr;
+      const myUsername = await getUsername(me);
+      sseSend(m.recipient_email, "message", { from: myUsername }); // 通知对方移除
+      return res.json({ deleted: true, recalled: true });
+    }
+
+    // scope = "me"：仅从自己一侧隐藏；若两侧都已隐藏则彻底删除。
+    const patch = {};
+    if (isSender) patch.deleted_by_sender = true;
+    if (isRecipient) patch.deleted_by_recipient = true;
+    const bothHidden =
+      (m.deleted_by_sender || patch.deleted_by_sender) && (m.deleted_by_recipient || patch.deleted_by_recipient);
+    if (bothHidden) {
+      const { error: dErr } = await supabase.from("forum_messages").delete().eq("id", m.id);
+      if (dErr) throw dErr;
+      return res.json({ deleted: true });
+    }
+    const { error: uErr } = await supabase.from("forum_messages").update(patch).eq("id", m.id);
+    if (uErr) {
+      if (isMissingColumn(uErr)) return res.status(409).json({ message: "请先在 Supabase 执行 messages 撤回/删除 迁移。", code: "MIGRATION_REQUIRED" });
+      throw uErr;
+    }
+    return res.json({ deleted: true });
+  } catch (error) {
+    console.error("Delete message failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
+// 「正在输入」信号：推给对方（仅普通账号）。
+app.post("/api/messages/typing", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ ok: false });
+  const to = String(req.body?.to || "").trim();
+  if (!to) return res.json({ ok: false });
+  try {
+    const peer = await getVisitorByUsername(to);
+    if (!peer || peer.email === req.visitor.email) return res.json({ ok: false });
+    const myUsername = await getUsername(req.visitor.email);
+    if (myUsername) sseSend(peer.email, "typing", { from: myUsername });
+    return res.json({ ok: true });
+  } catch {
+    return res.json({ ok: false });
+  }
+});
+
+// 私信实时推送（SSE）。EventSource 不能带自定义头，令牌通过 ?token= 传入。
+app.get("/api/stream", (req, res) => {
+  const visitor = verifyVisitorToken(String(req.query.token || "").trim());
+  if (!visitor) return res.status(401).end();
+  res.set({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  res.write(": connected\n\n");
+
+  let set = sseClients.get(visitor.email);
+  if (!set) { set = new Set(); sseClients.set(visitor.email, set); }
+  set.add(res);
+
+  const ping = setInterval(() => { try { res.write(": ping\n\n"); } catch {} }, 25000);
+  req.on("close", () => {
+    clearInterval(ping);
+    const s = sseClients.get(visitor.email);
+    if (s) { s.delete(res); if (!s.size) sseClients.delete(visitor.email); }
+  });
 });
 
 // 在帖子下回复（讨论）。
@@ -2449,14 +3287,17 @@ app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   try {
     const { data: post, error: pErr } = await supabase
       .from("forum_posts")
-      .select("id")
+      .select("id, author_email, status")
       .eq("id", req.params.id)
       .maybeSingle();
     if (pErr) {
       if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
-      throw pErr;
+      if (!isMissingColumn(pErr)) throw pErr;
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
+    // 草稿不可被他人回复。
+    const ownerOnly = post.status === "draft" && !(actor.isAdmin || (actor.email && post.author_email === actor.email));
+    if (ownerOnly) return res.status(404).json({ message: "帖子不存在。" });
 
     const { data, error } = await supabase
       .from("forum_replies")
@@ -2490,14 +3331,18 @@ app.post("/api/forum/posts/:id/like", requireVisitor, async (req, res) => {
   try {
     const { data: post, error: pErr } = await supabase
       .from("forum_posts")
-      .select("id")
+      .select("id, author_email, status")
       .eq("id", req.params.id)
       .maybeSingle();
     if (pErr) {
       if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
-      throw pErr;
+      if (!isMissingColumn(pErr)) throw pErr;
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
+    // 草稿不可被他人点赞。
+    if (post.status === "draft" && !(actor.isAdmin || (actor.email && post.author_email === actor.email))) {
+      return res.status(404).json({ message: "帖子不存在。" });
+    }
 
     // 已点过赞则取消，否则新增（toggle）。
     const { data: existing, error: exErr } = await supabase
@@ -2608,6 +3453,18 @@ app.get("/contact", (req, res) => {
 
 app.get("/forum", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "forum.html"));
+});
+
+app.get("/space", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "space.html"));
+});
+
+app.get("/u/:username", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "user.html"));
+});
+
+app.get("/messages", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "messages.html"));
 });
 
 app.get("/welcome", (req, res) => {

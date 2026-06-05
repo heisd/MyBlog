@@ -118,6 +118,25 @@
     @keyframes like-pop { 0%{transform:scale(1)} 40%{transform:scale(1.4)} 100%{transform:scale(1)} }
 
     .post-body { white-space: pre-wrap; word-break: break-word; line-height: 1.9; color: var(--ink); font-size: 1.05rem; margin: 0; }
+    .md-body { line-height: 1.9; color: var(--ink); font-size: 1.05rem; word-break: break-word; }
+    .md-body h1, .md-body h2, .md-body h3 { line-height: 1.3; margin: 1.1em 0 0.5em; color: var(--accent-dark); }
+    .md-body h1 { font-size: 1.5rem; } .md-body h2 { font-size: 1.28rem; } .md-body h3 { font-size: 1.1rem; }
+    .md-body p { margin: 0 0 0.9em; }
+    .md-body ul, .md-body ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+    .md-body blockquote { margin: 0 0 0.9em; padding: 6px 14px; border-left: 3px solid var(--accent); background: rgba(204,106,45,0.07); color: var(--muted); border-radius: 0 8px 8px 0; }
+    .md-body code { background: rgba(107,98,91,0.12); padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+    .md-body pre { background: #2b241d; color: #f4efe7; padding: 14px 16px; border-radius: 12px; overflow: auto; }
+    .md-body pre code { background: none; padding: 0; color: inherit; }
+    .md-body a { color: var(--accent-dark); font-weight: 700; }
+    .md-body hr { border: none; border-top: 1px solid var(--line); margin: 1.2em 0; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: #f0ddc8; flex: none; vertical-align: middle; }
+    .avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg,#cc6a2d,#8e4317); font-weight: 800; font-size: 0.85rem; }
+    .author-chip { display: inline-flex; align-items: center; gap: 7px; }
+    .detail-head .avatar, .author-lg .avatar { width: 44px; height: 44px; font-size: 1.1rem; }
+    .author-bio { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    a.author-link { text-decoration: none; color: inherit; cursor: pointer; }
+    a.author-link:hover .author { color: var(--accent-dark); text-decoration: underline; }
+    a.author-link:hover .avatar { filter: brightness(0.96); }
     .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
     .detail-head h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin: 0 0 8px; }
     .replies-title { margin: 8px 0 16px; font-size: 1.1rem; color: var(--accent-dark); }
@@ -150,6 +169,7 @@
         <a href="/">首页</a>
         <a href="/projects">项目归档</a>
         <a href="/forum">论坛</a>
+        <a href="/space">我的空间</a>
         <a href="/contact">联系我</a>
         <a href="/admin-login">进入后台</a>
       </nav>
@@ -180,6 +200,20 @@
       </div>
     </section>
 
+    <!-- 未登录：登录门禁（进入论坛需先登录） -->
+    <section class="panel" id="auth-gate" hidden>
+      <h2>请先登录账号</h2>
+      <p class="msg">进入论坛需要先登录。登录后即可浏览帖子、发表文章并参与讨论。</p>
+      <div class="form-actions">
+        <a class="button button-primary" href="/welcome">去登录 / 注册 →</a>
+        <a class="button button-secondary" href="/">返回首页</a>
+      </div>
+    </section>
+
+    <!-- 确认登录状态前的占位 -->
+    <div class="loading" id="checking">正在确认登录状态…</div>
+
+    <div id="forum-main" hidden>
     <!-- 列表视图 -->
     <section id="list-view">
       <div class="toolbar">
@@ -227,6 +261,7 @@
         </div>
       </section>
     </section>
+    </div><!-- /#forum-main -->
   </main>
 
   <script>
@@ -236,6 +271,37 @@
 
     let me = null;          // { email, username, isAdmin }
     let currentPostId = null;
+    let authorsMap = {};    // username -> { avatar, bio }
+
+    // 安全 Markdown 渲染：先整体转义，再仅引入受控标签；链接限定 http(s)。
+    function mdToSafeHtml(src) {
+      const esc = (s) => String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+      function inline(s) {
+        s = s.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
+        s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+        s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + "</a>");
+        return s;
+      }
+      const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+      const out = []; let i = 0;
+      const isBlock = (l) => /^```/.test(l) || /^#{1,3}\s/.test(l) || /^>\s?/.test(l) || /^\s*[-*]\s+/.test(l) || /^\s*\d+\.\s+/.test(l) || /^(---|\*\*\*)\s*$/.test(l);
+      while (i < lines.length) {
+        const line = lines[i];
+        if (/^```/.test(line)) { const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) { buf.push(esc(lines[i])); i++; } i++; out.push("<pre><code>" + buf.join("\n") + "</code></pre>"); continue; }
+        const h = line.match(/^(#{1,3})\s+(.*)$/);
+        if (h) { const lv = h[1].length; out.push("<h" + lv + ">" + inline(esc(h[2])) + "</h" + lv + ">"); i++; continue; }
+        if (/^>\s?/.test(line)) { const buf = []; while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(inline(esc(lines[i].replace(/^>\s?/, "")))); i++; } out.push("<blockquote>" + buf.join("<br>") + "</blockquote>"); continue; }
+        if (/^\s*[-*]\s+/.test(line)) { const buf = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { buf.push("<li>" + inline(esc(lines[i].replace(/^\s*[-*]\s+/, ""))) + "</li>"); i++; } out.push("<ul>" + buf.join("") + "</ul>"); continue; }
+        if (/^\s*\d+\.\s+/.test(line)) { const buf = []; while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { buf.push("<li>" + inline(esc(lines[i].replace(/^\s*\d+\.\s+/, ""))) + "</li>"); i++; } out.push("<ol>" + buf.join("") + "</ol>"); continue; }
+        if (/^(---|\*\*\*)\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+        if (/^\s*$/.test(line)) { i++; continue; }
+        const buf = [];
+        while (i < lines.length && !/^\s*$/.test(lines[i]) && !isBlock(lines[i])) { buf.push(inline(esc(lines[i]))); i++; }
+        out.push("<p>" + buf.join("<br>") + "</p>");
+      }
+      return out.join("\n");
+    }
 
     function token(key) { return localStorage.getItem(key); }
     function accessHeaders(extra) {
@@ -260,6 +326,24 @@
     function setMsg(el, text, type = "") {
       el.textContent = text || "";
       el.className = "msg" + (type ? " " + type : "");
+    }
+    function initialChar(name) { const t = String(name || "").trim(); return t ? t[0].toUpperCase() : "?"; }
+    // 通用头像占位符（中性人像，主题配色），头像缺失或加载失败时使用。
+    const AVATAR_PH = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22%23efe0cd%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2225%22%20r=%2212%22%20fill=%22%23b88c5a%22/%3E%3Cpath%20d=%22M12%2058c0-12%2010-19%2020-19s20%207%2020%2019%22%20fill=%22%23b88c5a%22/%3E%3C/svg%3E";
+    function imgFallback(el) { el.onerror = null; el.src = AVATAR_PH; }
+    function avatarHtml(username) {
+      const info = authorsMap[username];
+      const url = info && info.avatar;
+      const src = url || AVATAR_PH;
+      return `<img class="avatar" src="${escapeHtml(src)}" alt="${escapeHtml(username || "")}" onerror="imgFallback(this)">`;
+    }
+    function profileHref(username) { return "/u/" + encodeURIComponent(username || ""); }
+    // 作者名片：有公开资料的链接到 TA 的主页，否则纯文本（如管理员 / 已注销）。
+    function authorChip(username) {
+      const inner = `${avatarHtml(username)}<span class="author">${escapeHtml(username || "匿名")}</span>`;
+      return authorsMap[username]
+        ? `<a class="author-link author-chip" href="${profileHref(username)}" title="查看 ${escapeHtml(username || "")} 的主页">${inner}</a>`
+        : `<span class="author-chip">${inner}</span>`;
     }
     const USERNAME_RE = /^[一-龥A-Za-z0-9_-]{2,20}$/;
 
@@ -402,7 +486,7 @@
         <article class="post-card" data-id="${escapeHtml(p.id)}" style="--i:${i}">
           <h3>${escapeHtml(p.title)}</h3>
           <div class="post-meta">
-            <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
+            ${authorChip(p.authorUsername)}
             <span>${escapeHtml(fmtDate(p.createdAt))}</span>
             <span class="badge">💬 ${p.replyCount || 0}</span>
             ${likeBtnHtml(p)}
@@ -424,6 +508,7 @@
           wrap.innerHTML = `<div class="error">论坛功能尚未初始化。请先在 Supabase 执行 <b>data/migration-add-forum.sql</b> 后刷新本页。</div>`;
           return;
         }
+        authorsMap = (res.data && res.data.authors) || {};
         const posts = (res.data && res.data.posts) || [];
         if (!posts.length) { wrap.innerHTML = `<div class="empty">还没有帖子，来发表第一篇吧。</div>`; return; }
         wrap.innerHTML = posts.map((p, i) => postCardHtml(p, i)).join("");
@@ -466,24 +551,32 @@
     // ---- 帖子详情 + 回复 ----
     function detailPostHtml(p) {
       return `
-        <div class="detail-head">
-          <div>
-            <h2>${escapeHtml(p.title)}</h2>
-            <div class="post-meta">
-              <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
-              <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+        <div class="detail-head author-lg">
+          <div class="author-chip" style="align-items:flex-start;">
+            ${authorsMap[p.authorUsername]
+              ? `<a class="author-link" href="${profileHref(p.authorUsername)}" title="查看主页">${avatarHtml(p.authorUsername)}</a>`
+              : avatarHtml(p.authorUsername)}
+            <div>
+              <h2 style="margin:0 0 4px;">${escapeHtml(p.title)}</h2>
+              <div class="post-meta" style="margin:0;">
+                ${authorsMap[p.authorUsername]
+                  ? `<a class="author-link author" href="${profileHref(p.authorUsername)}">${escapeHtml(p.authorUsername || "匿名")}</a>`
+                  : `<span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>`}
+                <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+              </div>
+              ${(authorsMap[p.authorUsername] && authorsMap[p.authorUsername].bio) ? `<p class="author-bio">${escapeHtml(authorsMap[p.authorUsername].bio)}</p>` : ""}
             </div>
           </div>
           ${p.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-post="${escapeHtml(p.id)}">删除帖子</button>` : ""}
         </div>
-        <p class="post-body">${escapeHtml(p.content)}</p>
+        <div class="md-body" style="margin-top:14px;">${mdToSafeHtml(p.content)}</div>
         <div class="post-meta" style="margin-top:18px;margin-bottom:0;">${likeBtnHtml(p)}</div>`;
     }
     function replyHtml(r) {
       return `
         <div class="reply" data-reply="${escapeHtml(r.id)}">
           <div class="reply-meta">
-            <span class="author">${escapeHtml(r.authorUsername || "匿名")}</span>
+            ${authorChip(r.authorUsername)}
             <span>${escapeHtml(fmtDate(r.createdAt))}</span>
             ${r.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-reply="${escapeHtml(r.id)}" style="padding:2px 8px;">删除</button>` : ""}
           </div>
@@ -503,6 +596,7 @@
         if (res.status === 401) { window.location.href = "/welcome"; return; }
         if (res.status === 404) { postEl.innerHTML = `<div class="error">帖子不存在或已被删除。</div>`; return; }
         if (!res.ok) throw new Error((res.data && res.data.message) || "加载失败。");
+        authorsMap = res.data.authors || {};
         postEl.innerHTML = detailPostHtml(res.data.post);
         const replies = res.data.replies || [];
         document.getElementById("replies-title").textContent = `讨论（${replies.length}）`;
@@ -573,6 +667,7 @@
     document.getElementById("reply-submit").addEventListener("click", submitReply);
 
     document.getElementById("posts").addEventListener("click", (e) => {
+      if (e.target.closest("a.author-link")) return; // 点作者名片 → 跳主页
       const likeBtn = e.target.closest("[data-like]");
       if (likeBtn) { toggleLike(likeBtn.getAttribute("data-like"), likeBtn); return; }
       const card = e.target.closest(".post-card");
@@ -592,13 +687,23 @@
     // ---- 初始化 ----
     (async function init() {
       const ok = await loadSession();
-      if (!ok) { window.location.href = "/welcome"; return; }
+      document.getElementById("checking").hidden = true;
+      if (!ok) {
+        // 未登录：只显示登录门禁，不渲染论坛内容。
+        document.getElementById("auth-gate").hidden = false;
+        return;
+      }
+      document.getElementById("forum-main").hidden = false;
       renderMe();
       // 已登录但还没用户名 → 先引导设置；否则可发帖。
       showUsernameGate(!me.username);
       await loadPosts();
+      // 支持从主页/链接直接打开某帖：/forum?post=<id>
+      const wantPost = new URLSearchParams(location.search).get("post");
+      if (wantPost) openPost(wantPost);
     })();
   </script>
   <script src="/assistant.js" defer></script>
+  <script src="/nav-auth.js" defer></script>
 </body>
 </html>

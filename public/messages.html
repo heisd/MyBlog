@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>私信 | Heisd.Stark</title>
+  <style>
+    :root {
+      --bg: #f4efe7; --paper: rgba(255,253,247,0.92); --card: #fffdf8; --ink: #1f1f1f;
+      --muted: #6b625b; --accent: #cc6a2d; --accent-dark: #8e4317; --line: #e5dbcf;
+      --danger: #b91c1c; --shadow: 0 22px 50px rgba(68,48,30,0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; color: var(--ink); min-height: 100vh;
+      background: radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%); }
+    .topbar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+      background: rgba(248,244,237,0.78); border-bottom: 1px solid rgba(229,219,207,0.9); }
+    .topbar-inner { max-width: 1000px; margin: 0 auto; padding: 18px 24px; display: flex;
+      align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+    .brand { font-weight: 700; color: var(--accent-dark); text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.95rem; }
+    .nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    .nav a { color: var(--muted); text-decoration: none; font-size: 0.96rem; font-weight: 700; }
+    .nav a:hover { color: var(--accent-dark); }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 30px 24px 60px; }
+    .panel { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 20px; box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 20px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 18px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-weight: 700; text-decoration: none; color: var(--ink); transition: transform 180ms ease; }
+    .button-primary { background: linear-gradient(120deg,#cc6a2d,#e0883f,#8e4317,#cc6a2d); background-size: 300% 100%; color: #fff; }
+    .button-secondary { background: rgba(255,255,255,0.85); border: 1px solid var(--line); }
+    .button:hover { transform: translateY(-1px); }
+    .button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .msg { min-height: 18px; font-size: 0.9rem; line-height: 1.6; color: var(--muted); }
+    .form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+    h1 { margin: 0 0 4px; font-size: clamp(1.8rem,4vw,2.5rem); }
+    .lead { color: var(--muted); margin: 0 0 18px; }
+
+    .dm-layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 760px) { .dm-layout { grid-template-columns: 1fr; } }
+
+    .conv-list { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; max-height: 70vh; overflow-y: auto; }
+    .conv { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background 140ms ease; }
+    .conv:last-child { border-bottom: none; }
+    .conv:hover { background: rgba(204,106,45,0.06); }
+    .conv.active { background: rgba(204,106,45,0.12); }
+    .conv .ci { flex: 1; min-width: 0; }
+    .conv .cname { font-weight: 700; color: var(--ink); display: flex; justify-content: space-between; gap: 6px; }
+    .conv .cname .t { font-size: 0.74rem; color: var(--muted); font-weight: 400; white-space: nowrap; }
+    .conv .clast { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .unread-dot { background: var(--accent); color: #fff; border-radius: 999px; font-size: 0.72rem; font-weight: 800; padding: 1px 7px; margin-left: 6px; }
+
+    .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: #f0ddc8; flex: none; }
+    .avatar-sm { width: 30px; height: 30px; }
+
+    .thread { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 60vh; max-height: 74vh; }
+    .thread-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .thread-head a { color: var(--accent-dark); font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+    .thread-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #f8f4ed; }
+    .bubble { max-width: 78%; padding: 9px 13px; border-radius: 14px; line-height: 1.6; font-size: 0.96rem; white-space: pre-wrap; word-break: break-word; }
+    .bubble.them { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+    .bubble.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .bubble .bt { display: block; font-size: 0.7rem; opacity: 0.7; margin-top: 4px; }
+    .bubble .bact { cursor: pointer; margin-left: 8px; }
+    .bubble .bact:hover { text-decoration: underline; }
+    .dm-notice { padding: 14px 16px; border-top: 1px solid var(--line); background: var(--card); color: var(--muted); text-align: center; font-size: 0.9rem; line-height: 1.6; }
+    .dm-notice a { color: var(--accent-dark); font-weight: 700; text-decoration: none; }
+    .day-sep { align-self: center; margin: 6px 0; padding: 3px 12px; border-radius: 999px; background: rgba(107,98,91,0.12); color: var(--muted); font-size: 0.74rem; }
+    .typing-ind { padding: 6px 16px; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+    .typing-ind .dots span { animation: blink 1.2s infinite; }
+    .typing-ind .dots span:nth-child(2){ animation-delay: 0.2s; } .typing-ind .dots span:nth-child(3){ animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+    .thread-foot { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--card); }
+    .thread-foot textarea { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffefb; font: inherit; resize: none; min-height: 44px; max-height: 140px; }
+    .thread-foot textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
+
+    .empty, .error, .loading { color: var(--muted); line-height: 1.8; text-align: center; padding: 30px; }
+    .error { color: var(--danger); }
+    .placeholder { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--muted); text-align: center; padding: 30px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/projects">项目归档</a>
+        <a href="/forum">论坛</a>
+        <a href="/space">我的空间</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel" id="auth-gate" hidden>
+      <h2>请先登录账号</h2>
+      <p class="msg">收发私信需要先登录。</p>
+      <div class="form-actions">
+        <a class="button button-primary" href="/welcome">去登录 / 注册 →</a>
+        <a class="button button-secondary" href="/">返回首页</a>
+      </div>
+    </section>
+
+    <div class="loading" id="checking">正在确认登录状态…</div>
+
+    <div id="dm-main" hidden>
+      <h1>私信</h1>
+      <p class="lead">和站内用户一对一交流。在用户主页点「私信」也可发起会话。</p>
+      <div class="dm-layout">
+        <aside class="conv-list" id="conv-list"></aside>
+        <section class="thread" id="thread">
+          <div class="placeholder" id="thread-placeholder">选择左侧的一个会话，或从用户主页发起私信。</div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const VISITOR_KEY = "visitorAccessToken";
+    const ADMIN_KEY = "adminToken";
+    const AVATAR_PH = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22%23efe0cd%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2225%22%20r=%2212%22%20fill=%22%23b88c5a%22/%3E%3Cpath%20d=%22M12%2058c0-12%2010-19%2020-19s20%207%2020%2019%22%20fill=%22%23b88c5a%22/%3E%3C/svg%3E";
+
+    let currentPeer = null;
+    function token(k) { return localStorage.getItem(k); }
+    function accessHeaders(extra) {
+      const h = Object.assign({}, extra || {});
+      const v = token(VISITOR_KEY); if (v) h["X-Access-Token"] = v;
+      const a = token(ADMIN_KEY); if (a) h["Authorization"] = "Bearer " + a;
+      return h;
+    }
+    function escapeHtml(t) {
+      return String(t ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+    }
+    function fmtTime(v) {
+      if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return "";
+      const p = (n) => String(n).padStart(2,"0");
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      return sameDay ? `${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+    function imgFallback(el) { el.onerror = null; el.src = AVATAR_PH; }
+    function avatarImg(url, cls) { return `<img class="avatar ${cls || ""}" src="${escapeHtml(url || AVATAR_PH)}" alt="" onerror="imgFallback(this)">`; }
+
+    const RETRY = [1500,2500,4000,6000,8000,10000];
+    const COLD = new Set([502,503,504]);
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function api(path, options = {}, { retries = 6, onWaking } = {}) {
+      let last;
+      for (let a = 0; ; a++) {
+        try {
+          const res = await fetch(API_BASE + path, options);
+          const raw = await res.text(); let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+          if (COLD.has(res.status) && data === null && a < retries) { if (onWaking) onWaking(a+1); await delay(RETRY[Math.min(a,RETRY.length-1)]); continue; }
+          return { ok: res.ok, status: res.status, data };
+        } catch (e) { last = e; if (a < retries) { if (onWaking) onWaking(a+1); await delay(RETRY[Math.min(a,RETRY.length-1)]); continue; } throw last; }
+      }
+    }
+    async function loggedIn() {
+      const v = token(VISITOR_KEY), a = token(ADMIN_KEY);
+      try {
+        if (v) { const r = await api("/api/access/verify", { headers: accessHeaders() }); if (r.ok && r.data && r.data.authenticated) return true; localStorage.removeItem(VISITOR_KEY); }
+        if (a) { const r = await api("/api/auth/verify", { headers: accessHeaders() }); if (r.ok && r.data && r.data.authenticated) return r.data && !r.data.username ? true : true; localStorage.removeItem(ADMIN_KEY); }
+      } catch {}
+      return false;
+    }
+
+    // ---- 会话列表 ----
+    function convHtml(c) {
+      return `
+        <div class="conv${currentPeer === c.username ? " active" : ""}" data-u="${escapeHtml(c.username)}">
+          ${avatarImg(c.avatar)}
+          <div class="ci">
+            <div class="cname"><span>${escapeHtml(c.username)}${c.unread ? `<span class="unread-dot">${c.unread}</span>` : ""}</span><span class="t">${escapeHtml(fmtTime(c.lastAt))}</span></div>
+            <div class="clast">${c.mine ? "你: " : ""}${escapeHtml(c.lastMessage || "")}</div>
+          </div>
+        </div>`;
+    }
+    async function loadConversations() {
+      const wrap = document.getElementById("conv-list");
+      wrap.innerHTML = `<div class="loading">加载中…</div>`;
+      try {
+        const r = await api("/api/messages", { headers: accessHeaders() });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) throw new Error((r.data && r.data.message) || "加载失败。");
+        if (r.data && r.data.needsMigration) { wrap.innerHTML = `<div class="error">私信功能尚未初始化。</div>`; return; }
+        const list = (r.data && r.data.conversations) || [];
+        wrap.innerHTML = list.length ? list.map(convHtml).join("") : `<div class="empty">还没有私信。</div>`;
+      } catch (e) { wrap.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`; }
+    }
+
+    // ---- 会话内容 ----
+    let currentCanMessage = false;
+    let threadTimer = null;
+    function dayKey(v) { const d = new Date(v); return isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+    function dayLabel(v) {
+      const d = new Date(v); if (isNaN(d.getTime())) return "";
+      const now = new Date();
+      const ymd = (x) => `${x.getFullYear()}-${x.getMonth()+1}-${x.getDate()}`;
+      const y = new Date(now); y.setDate(now.getDate() - 1);
+      if (ymd(d) === ymd(now)) return "今天";
+      if (ymd(d) === ymd(y)) return "昨天";
+      return d.getFullYear() === now.getFullYear() ? `${d.getMonth()+1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    }
+    function dividerHtml(v) { return `<div class="day-sep" data-day="${dayKey(v)}">${escapeHtml(dayLabel(v))}</div>`; }
+    function bubbleHtml(m) {
+      const acts = m.mine
+        ? `<span class="bact" data-act="recall" data-id="${escapeHtml(m.id)}">撤回</span><span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`
+        : `<span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`;
+      return `<div class="bubble ${m.mine ? "me" : "them"}" data-mid="${escapeHtml(m.id)}" data-day="${dayKey(m.createdAt)}">${escapeHtml(m.content)}<span class="bt">${escapeHtml(fmtTime(m.createdAt))} · ${acts}</span></div>`;
+    }
+    function buildMessagesHtml(messages) {
+      let html = "", prev = "";
+      for (const m of messages) {
+        const k = dayKey(m.createdAt);
+        if (k !== prev) { html += dividerHtml(m.createdAt); prev = k; }
+        html += bubbleHtml(m);
+      }
+      return html;
+    }
+    function onBubbleAction(e) {
+      const a = e.target.closest(".bact");
+      if (a) msgAction(a.getAttribute("data-id"), a.getAttribute("data-act"));
+    }
+    async function msgAction(id, scope) {
+      if (scope === "recall" && !confirm("撤回这条消息？双方都将不再看到。")) return;
+      if (scope === "me" && !confirm("从你这一侧删除这条消息？")) return;
+      try {
+        const r = await api("/api/messages/" + encodeURIComponent(id), { method: "DELETE", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ scope }) }, { retries: 1 });
+        if (!r.ok) { alert((r.data && r.data.message) || "操作失败。"); return; }
+        const sel = window.CSS && CSS.escape ? CSS.escape(id) : id;
+        const el = document.querySelector('.bubble[data-mid="' + sel + '"]');
+        if (el) el.remove();
+        loadConversations();
+      } catch { alert("网络异常，请稍后再试。"); }
+    }
+    function renderThread(peer, messages, canMessage) {
+      const t = document.getElementById("thread");
+      const foot = canMessage
+        ? `<div class="thread-foot">
+             <textarea id="dm-input" placeholder="输入私信内容，Enter 发送，Shift+Enter 换行…"></textarea>
+             <button type="button" class="button button-primary" id="dm-send">发送</button>
+           </div>`
+        : `<div class="dm-notice">需要与 <b>${escapeHtml(peer.username)}</b> 互相关注后才能发私信。去 <a href="/u/${encodeURIComponent(peer.username)}">TA 的主页</a> 关注一下吧。</div>`;
+      t.innerHTML = `
+        <div class="thread-head">
+          <a href="/u/${encodeURIComponent(peer.username)}" title="查看主页">${avatarImg(peer.avatar, "avatar-sm")}<span>${escapeHtml(peer.username)}</span></a>
+        </div>
+        <div class="thread-body" id="thread-body">
+          ${messages.length ? buildMessagesHtml(messages) : `<div class="empty">还没有消息${canMessage ? "，发送第一条吧。" : "。"}</div>`}
+        </div>
+        <div class="typing-ind" id="typing-ind" hidden>${escapeHtml(peer.username)} 正在输入<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+        ${foot}`;
+      const body = document.getElementById("thread-body");
+      body.scrollTop = body.scrollHeight;
+      body.addEventListener("click", onBubbleAction);
+      if (canMessage) {
+        const input = document.getElementById("dm-input");
+        input.focus();
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+        input.addEventListener("input", maybeSendTyping);
+        document.getElementById("dm-send").addEventListener("click", sendMessage);
+      }
+    }
+    async function openThread(username) {
+      currentPeer = username;
+      document.querySelectorAll(".conv").forEach((el) => el.classList.toggle("active", el.dataset.u === username));
+      const t = document.getElementById("thread");
+      t.innerHTML = `<div class="placeholder">加载会话…</div>`;
+      try {
+        const r = await api("/api/messages/" + encodeURIComponent(username), { headers: accessHeaders() });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (r.status === 404) { t.innerHTML = `<div class="placeholder">用户「${escapeHtml(username)}」不存在。</div>`; return; }
+        if (!r.ok) throw new Error((r.data && r.data.message) || "加载失败。");
+        currentCanMessage = !!r.data.canMessage;
+        renderThread(r.data.peer, r.data.messages || [], currentCanMessage);
+        loadConversations(); // 进入会话后未读已清，刷新左侧
+        startThreadPolling();
+      } catch (e) { t.innerHTML = `<div class="placeholder error">${escapeHtml(e.message)}</div>`; }
+    }
+    async function sendMessage() {
+      if (!currentPeer) return;
+      const input = document.getElementById("dm-input");
+      const btn = document.getElementById("dm-send");
+      const content = input.value.trim();
+      if (!content) return;
+      btn.disabled = true;
+      try {
+        const r = await api("/api/messages", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ to: currentPeer, content }) });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) { alert((r.data && r.data.message) || "发送失败。"); btn.disabled = false; return; }
+        input.value = "";
+        const body = document.getElementById("thread-body");
+        const empty = body.querySelector(".empty"); if (empty) empty.remove();
+        body.insertAdjacentHTML("beforeend", bubbleHtml(r.data));
+        body.scrollTop = body.scrollHeight;
+        btn.disabled = false;
+        input.focus();
+        loadConversations();
+      } catch { alert("网络异常，请稍后再试。"); btn.disabled = false; }
+    }
+
+    // ---- 实时刷新（轮询）----
+    function startThreadPolling() {
+      clearInterval(threadTimer);
+      threadTimer = setInterval(pollThread, 8000); // SSE 负责即时，这里作兜底
+    }
+    async function pollThread() {
+      if (!currentPeer || document.hidden) return;
+      let r;
+      try { r = await api("/api/messages/" + encodeURIComponent(currentPeer), { headers: accessHeaders() }, { retries: 0 }); } catch { return; }
+      if (!r || !r.ok || !r.data) return;
+      reconcileMessages(r.data.messages || []);
+    }
+    function reconcileMessages(messages) {
+      const body = document.getElementById("thread-body");
+      if (!body) return;
+      const newIds = messages.map((m) => String(m.id)).join(",");
+      const curIds = Array.from(body.querySelectorAll(".bubble[data-mid]")).map((el) => el.getAttribute("data-mid")).join(",");
+      if (newIds === curIds) return; // 无变化
+      const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 90;
+      const prevTop = body.scrollTop;
+      body.innerHTML = messages.length ? buildMessagesHtml(messages) : `<div class="empty">还没有消息。</div>`;
+      body.scrollTop = nearBottom ? body.scrollHeight : prevTop;
+      loadConversations();
+    }
+
+    // ---- SSE 实时推送 + 正在输入 ----
+    let es = null, lastTypingSent = 0, typingHideTimer = null;
+    function openStream() {
+      const v = token(VISITOR_KEY); if (!v || es) return;
+      try {
+        es = new EventSource(API_BASE + "/api/stream?token=" + encodeURIComponent(v));
+        es.addEventListener("message", onPush);
+        es.addEventListener("typing", onTyping);
+      } catch {}
+    }
+    function onPush(e) {
+      let d = {}; try { d = JSON.parse(e.data || "{}"); } catch {}
+      loadConversations();
+      if (currentPeer && (!d.from || d.from === currentPeer)) pollThread();
+    }
+    function onTyping(e) {
+      let d = {}; try { d = JSON.parse(e.data || "{}"); } catch {}
+      if (!currentPeer || d.from !== currentPeer) return;
+      const el = document.getElementById("typing-ind"); if (!el) return;
+      el.hidden = false;
+      clearTimeout(typingHideTimer);
+      typingHideTimer = setTimeout(() => { el.hidden = true; }, 4000);
+    }
+    function maybeSendTyping() {
+      if (!currentPeer || !currentCanMessage) return;
+      const now = Date.now();
+      if (now - lastTypingSent < 3000) return;
+      lastTypingSent = now;
+      fetch(API_BASE + "/api/messages/typing", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ to: currentPeer }) }).catch(() => {});
+    }
+
+    document.getElementById("conv-list").addEventListener("click", (e) => {
+      const c = e.target.closest(".conv");
+      if (c) {
+        const u = c.dataset.u;
+        history.replaceState(null, "", "/messages?to=" + encodeURIComponent(u));
+        openThread(u);
+      }
+    });
+
+    (async function init() {
+      const ok = await loggedIn();
+      document.getElementById("checking").hidden = true;
+      if (!ok) { document.getElementById("auth-gate").hidden = false; return; }
+      // 管理员无私信（无邮箱身份）
+      if (!token(VISITOR_KEY) && token(ADMIN_KEY)) {
+        document.getElementById("dm-main").hidden = false;
+        document.getElementById("conv-list").innerHTML = `<div class="empty">私信为普通账号功能。</div>`;
+        document.getElementById("thread").innerHTML = `<div class="placeholder">管理员账号暂不支持收发私信。</div>`;
+        return;
+      }
+      document.getElementById("dm-main").hidden = false;
+      openStream(); // 实时推送
+      await loadConversations();
+      const to = new URLSearchParams(location.search).get("to");
+      if (to) openThread(to);
+      // 会话列表定时刷新兜底（最近消息 / 未读）
+      setInterval(() => { if (!document.hidden) loadConversations(); }, 15000);
+    })();
+  </script>
+  <script src="/nav-auth.js" defer></script>
+</body>
+</html>
