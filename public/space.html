@@ -99,6 +99,12 @@
     .profile-edit { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 16px; }
     .avatar-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
     .avatar-row .avatar { width: 72px; height: 72px; font-size: 1.7rem; }
+    #feed .post-card { cursor: pointer; transition: transform 180ms ease, box-shadow 180ms ease; }
+    #feed .post-card:hover { transform: translateY(-3px); box-shadow: 0 24px 48px rgba(68,48,30,0.14); }
+    a.author-link { text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 7px; }
+    a.author-link b { color: var(--accent-dark); font-weight: 700; }
+    a.author-link:hover b { text-decoration: underline; }
+    #feed .avatar { width: 26px; height: 26px; }
 
     /* 我的文章列表 */
     .post-card { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px;
@@ -244,6 +250,9 @@
 
     <h2 style="font-size:1.2rem;margin:6px 2px 14px;color:var(--accent-dark);">我的文章</h2>
     <div id="posts"></div>
+
+    <h2 style="font-size:1.2rem;margin:26px 2px 14px;color:var(--accent-dark);">关注动态</h2>
+    <div id="feed"></div>
     </div><!-- /#space-main -->
   </main>
 
@@ -557,6 +566,37 @@
       await loadMine();
     }
 
+    // ---- 关注动态 ----
+    let feedAuthors = {};
+    function feedCardHtml(p) {
+      const av = (feedAuthors[p.authorUsername] || {}).avatar;
+      return `
+        <article class="post-card" data-id="${escapeHtml(p.id)}">
+          <h3>${escapeHtml(p.title)}</h3>
+          <div class="post-meta">
+            <a class="author-link" href="/u/${encodeURIComponent(p.authorUsername || "")}">${avatarHtml(p.authorUsername, av)}<b>${escapeHtml(p.authorUsername || "")}</b></a>
+            <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+            <span>💬 ${p.replyCount || 0}</span>
+            <span>♥ ${p.likeCount || 0}</span>
+          </div>
+          <p class="post-excerpt">${escapeHtml(p.excerpt || "")}</p>
+        </article>`;
+    }
+    async function loadFeed() {
+      const wrap = document.getElementById("feed");
+      wrap.innerHTML = `<div class="loading">正在加载关注动态…</div>`;
+      try {
+        const r = await api("/api/feed", { headers: accessHeaders() });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) throw new Error((r.data && r.data.message) || "加载失败。");
+        if (r.data && r.data.needsMigration) { wrap.innerHTML = `<div class="empty">关注功能尚未初始化。</div>`; return; }
+        feedAuthors = (r.data && r.data.authors) || {};
+        const posts = (r.data && r.data.posts) || [];
+        if (!posts.length) { wrap.innerHTML = `<div class="empty">还没有关注动态。去 <a href="/forum">论坛</a> 发现感兴趣的作者，点开 TA 的主页关注一下吧。</div>`; return; }
+        wrap.innerHTML = posts.map(feedCardHtml).join("");
+      } catch (e) { wrap.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`; }
+    }
+
     // ---- 事件 ----
     document.getElementById("set-username-btn").addEventListener("click", submitUsername);
     document.getElementById("edit-profile-btn").addEventListener("click", openProfileEdit);
@@ -581,6 +621,11 @@
       else if (a === "toggle") togglePublish(p);
       else if (a === "delete") deletePost(id);
     });
+    document.getElementById("feed").addEventListener("click", (e) => {
+      if (e.target.closest("a.author-link")) return; // 点作者 → 跳主页
+      const card = e.target.closest(".post-card");
+      if (card) window.location.href = "/forum?post=" + encodeURIComponent(card.dataset.id);
+    });
 
     (async function init() {
       const ok = await loadSession();
@@ -595,6 +640,7 @@
       showUsernameGate(!me.username);
       await loadProfile();
       await loadMine();
+      await loadFeed();
     })();
   </script>
   <script src="/assistant.js" defer></script>
