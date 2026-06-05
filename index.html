@@ -237,6 +237,44 @@
       line-height: 1.8;
     }
 
+    /* Stark 元素：致敬 Heisd.Stark 品牌的电弧反应堆徽标（沿用站点暖色系，不与主题冲突）。 */
+    .stark-reactor {
+      display: grid;
+      justify-items: center;
+      gap: 8px;
+      padding: 6px 0 4px;
+    }
+    .arc-reactor {
+      width: 132px;
+      height: 132px;
+    }
+    .arc-reactor .ring-rotate {
+      transform-origin: 60px 60px;
+      animation: arc-spin 9s linear infinite;
+    }
+    .arc-reactor .arc-core {
+      transform-origin: 60px 60px;
+      animation: arc-pulse 2.8s ease-in-out infinite;
+    }
+    @keyframes arc-spin { to { transform: rotate(360deg); } }
+    @keyframes arc-pulse {
+      0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 4px rgba(204, 106, 45, 0.55)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 16px rgba(224, 136, 63, 0.95)); }
+    }
+    .stark-label {
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-dark);
+    }
+    .stark-tagline {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+    }
+
     .section-head {
       display: grid;
       gap: 10px;
@@ -377,6 +415,10 @@
       .ripple {
         display: none;
       }
+      .arc-reactor .ring-rotate,
+      .arc-reactor .arc-core {
+        animation: none;
+      }
     }
   </style>
 </head>
@@ -409,6 +451,38 @@
         </div>
       </section>
       <aside class="hero-panel">
+        <div class="stark-reactor">
+          <svg class="arc-reactor" viewBox="0 0 120 120" role="img" aria-label="Stark 电弧反应堆">
+            <defs>
+              <radialGradient id="arcGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#fff3e0"/>
+                <stop offset="45%" stop-color="#e0883f"/>
+                <stop offset="100%" stop-color="#8e4317"/>
+              </radialGradient>
+            </defs>
+            <circle cx="60" cy="60" r="54" fill="none" stroke="#8e4317" stroke-width="2.5" opacity="0.55"/>
+            <g class="ring-rotate">
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#cc6a2d" stroke-width="6" stroke-dasharray="6 8" opacity="0.85"/>
+              <g stroke="#8e4317" stroke-width="2" opacity="0.7">
+                <line x1="60" y1="20" x2="60" y2="32"/>
+                <line x1="60" y1="88" x2="60" y2="100"/>
+                <line x1="20" y1="60" x2="32" y2="60"/>
+                <line x1="88" y1="60" x2="100" y2="60"/>
+                <line x1="31.7" y1="31.7" x2="40.2" y2="40.2"/>
+                <line x1="79.8" y1="79.8" x2="88.3" y2="88.3"/>
+                <line x1="88.3" y1="31.7" x2="79.8" y2="40.2"/>
+                <line x1="40.2" y1="79.8" x2="31.7" y2="88.3"/>
+              </g>
+            </g>
+            <circle cx="60" cy="60" r="30" fill="none" stroke="#cc6a2d" stroke-width="2" opacity="0.5"/>
+            <g class="arc-core">
+              <circle cx="60" cy="60" r="18" fill="url(#arcGlow)"/>
+              <polygon points="60,49 70,66 50,66" fill="none" stroke="#fff7ef" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>
+            </g>
+          </svg>
+          <div class="stark-label">Stark Industries</div>
+          <p class="stark-tagline">“有时你得先跑起来，才知道怎么飞。”</p>
+        </div>
         <h2 class="hero-panel-title">欢迎来到我的博客</h2>
         <ul>
           <li>一个以机器人、视觉和 AI 为核心的个人技术主页</li>
