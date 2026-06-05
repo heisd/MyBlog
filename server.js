@@ -2729,6 +2729,80 @@ app.get("/api/forum/mine/:id", requireVisitor, async (req, res) => {
   }
 });
 
+// 用户公开主页：头像 + 自我介绍 + TA 已发布的文章（需登录查看）。
+app.get("/api/users/:username", requireVisitor, async (req, res) => {
+  const username = String(req.params.username || "").trim();
+  if (!username) return res.status(404).json({ message: "用户不存在。" });
+  try {
+    let { data: v, error: vErr } = await supabase
+      .from("visitors")
+      .select("username, avatar_url, bio, created_at")
+      .eq("username", username)
+      .maybeSingle();
+    if (vErr && isMissingColumn(vErr)) {
+      ({ data: v, error: vErr } = await supabase
+        .from("visitors")
+        .select("username, created_at")
+        .eq("username", username)
+        .maybeSingle());
+    }
+    if (vErr) throw vErr;
+    if (!v) return res.status(404).json({ message: "用户不存在。" });
+
+    let { data: posts, error: pErr } = await supabase
+      .from("forum_posts")
+      .select("id, title, content, created_at")
+      .eq("author_username", v.username)
+      .neq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (pErr && isMissingColumn(pErr)) {
+      ({ data: posts, error: pErr } = await supabase
+        .from("forum_posts")
+        .select("id, title, content, created_at")
+        .eq("author_username", v.username)
+        .order("created_at", { ascending: false })
+        .limit(100));
+    }
+    if (pErr) {
+      if (isMissingForumTable(pErr)) posts = [];
+      else throw pErr;
+    }
+    posts = posts || [];
+
+    const counts = {};
+    const likeCounts = {};
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
+      if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
+      if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+    }
+
+    return res.json({
+      user: {
+        username: v.username,
+        avatar: v.avatar_url || null,
+        bio: v.bio || null,
+        joinedAt: v.created_at || null,
+        postCount: posts.length,
+      },
+      posts: posts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        createdAt: p.created_at,
+        replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("Get user profile failed:", error.message);
+    return res.status(500).json({ message: "加载用户主页失败，请稍后再试。" });
+  }
+});
+
 // 在帖子下回复（讨论）。
 app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   const actor = await getForumActor(req);
@@ -2918,6 +2992,10 @@ app.get("/forum", (req, res) => {
 
 app.get("/space", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "space.html"));
+});
+
+app.get("/u/:username", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "user.html"));
 });
 
 app.get("/welcome", (req, res) => {

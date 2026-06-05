@@ -16,7 +16,7 @@
     localStorage.removeItem(UKEY);
     localStorage.removeItem(AVKEY);
   }
-  function initialChar(name) { var t = String(name || "").trim(); return t ? t[0].toUpperCase() : "👤"; }
+  var AVATAR_PH = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22%23efe0cd%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2225%22%20r=%2212%22%20fill=%22%23b88c5a%22/%3E%3Cpath%20d=%22M12%2058c0-12%2010-19%2020-19s20%207%2020%2019%22%20fill=%22%23b88c5a%22/%3E%3C/svg%3E";
 
   var style = document.createElement("style");
   style.textContent =
@@ -33,17 +33,12 @@
   function avatarNode() {
     var av = localStorage.getItem(AVKEY);
     var name = localStorage.getItem(UKEY) || "";
-    if (av) {
-      var img = document.createElement("img");
-      img.className = "nav-av";
-      img.src = av;
-      img.alt = name;
-      return img;
-    }
-    var sp = document.createElement("span");
-    sp.className = "nav-av nav-av-fb";
-    sp.textContent = initialChar(name);
-    return sp;
+    var img = document.createElement("img");
+    img.className = "nav-av";
+    img.src = av || AVATAR_PH;
+    img.alt = name;
+    img.onerror = function () { img.onerror = null; img.src = AVATAR_PH; };
+    return img;
   }
 
   function render() {

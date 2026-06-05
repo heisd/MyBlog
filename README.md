@@ -93,6 +93,7 @@ ClaudeAboutWeb/
 - `/project/:id`：项目详情页
 - `/forum`：论坛页（登录用户发表文章 / 帖子并互相讨论）
 - `/space`：个人空间（用户自己的写作器，保存草稿或发布到论坛）
+- `/u/:username`：用户公开主页（头像 + 自我介绍 + TA 已发布的文章）
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
@@ -102,6 +103,7 @@ ClaudeAboutWeb/
 - `/projects` -> `/projects.html`
 - `/forum` -> `/forum.html`
 - `/space` -> `/space.html`
+- `/u/:username` -> `/user.html?u=:username`
 - `/admin` -> `/admin.html`
 - `/project/:id` -> `/project-detail.html?id=:id`
 

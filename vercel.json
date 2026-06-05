@@ -17,6 +17,10 @@
       "destination": "/space.html"
     },
     {
+      "source": "/u/:username",
+      "destination": "/user.html?u=:username"
+    },
+    {
       "source": "/welcome",
       "destination": "/welcome.html"
     },

@@ -277,9 +277,11 @@
     let profile = { avatar: null, bio: "" };
     let editAvatar = null;
     function initialChar(name) { const t = String(name || "").trim(); return t ? t[0].toUpperCase() : "?"; }
+    // 通用头像占位符（中性人像，主题配色），头像缺失或加载失败时使用。
+    const AVATAR_PH = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20fill=%22%23efe0cd%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2225%22%20r=%2212%22%20fill=%22%23b88c5a%22/%3E%3Cpath%20d=%22M12%2058c0-12%2010-19%2020-19s20%207%2020%2019%22%20fill=%22%23b88c5a%22/%3E%3C/svg%3E";
+    function imgFallback(el) { el.onerror = null; el.src = AVATAR_PH; }
     function avatarHtml(name, url) {
-      if (url) return `<img class="avatar" src="${escapeHtml(url)}" alt="${escapeHtml(name || "")}">`;
-      return `<span class="avatar avatar-fallback">${escapeHtml(initialChar(name))}</span>`;
+      return `<img class="avatar" src="${escapeHtml(url || AVATAR_PH)}" alt="${escapeHtml(name || "")}" onerror="imgFallback(this)">`;
     }
     function profileMsg() { return document.getElementById("profile-msg"); }
     function renderProfile() {
