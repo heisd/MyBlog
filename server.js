@@ -801,6 +801,65 @@ function isAllowedEmailDomain(value) {
   return ALLOWED_EMAIL_DOMAINS.has(email.slice(at + 1));
 }
 
+// ===== 用户名（论坛身份）：站内唯一标识。2~20 位，允许中文 / 字母 / 数字 / 下划线 / 连字符。=====
+function normalizeUsername(value) {
+  return String(value || "").trim();
+}
+function isValidUsername(value) {
+  return /^[一-龥A-Za-z0-9_-]{2,20}$/.test(String(value || "").trim());
+}
+// 保留名：避免冒充管理员 / 官方身份。
+const RESERVED_USERNAMES = new Set(["admin", "administrator", "root", "system", "管理员", "管理", "系统", "官方"]);
+function isReservedUsername(value) {
+  return RESERVED_USERNAMES.has(String(value || "").trim().toLowerCase());
+}
+
+// 读取某账号的用户名（未设置或列未迁移时返回 null）。
+async function getUsername(email) {
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("username")
+      .eq("email", email)
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) return null;
+      throw error;
+    }
+    return data && data.username ? data.username : null;
+  } catch (error) {
+    console.error("getUsername failed:", error.message);
+    return null;
+  }
+}
+
+// 论坛表尚未创建时的容错（未执行 forum 迁移）。
+// 42P01 = undefined_table；PGRST205 = 表不在 PostgREST schema cache。
+function isMissingForumTable(error) {
+  if (!error) return false;
+  if (error.code === "42P01" || error.code === "PGRST205") return true;
+  return /forum_posts|forum_replies|does not exist|could not find the table/i.test(
+    `${error.message || ""} ${error.details || ""}`
+  );
+}
+
+// 论坛列表用：把正文压成一行摘要。
+function makeExcerpt(text, maxLen = 140) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen).trim()}…`;
+}
+
+// 解析「当前发帖人」：登录访客取其用户名；管理员以站点管理员身份发帖。
+async function getForumActor(req) {
+  if (req.visitor) {
+    return { email: req.visitor.email, username: await getUsername(req.visitor.email), isAdmin: false };
+  }
+  if (req.adminSession) {
+    return { email: null, username: ADMIN_USERNAME, isAdmin: true };
+  }
+  return null;
+}
+
 function toListItem(project) {
   return {
     id: project.id,
@@ -1330,16 +1389,83 @@ app.get("/api/access/verify", async (req, res) => {
   const visitor = verifyVisitorToken((req.get("x-access-token") || "").trim());
   if (!visitor) return res.status(401).json({ authenticated: false });
   const info = await getMemberInfo(visitor.email);
-  return res.json({ authenticated: true, email: visitor.email, member: info.member, memberUntil: info.memberUntil });
+  const username = await getUsername(visitor.email);
+  return res.json({ authenticated: true, email: visitor.email, username, member: info.member, memberUntil: info.memberUntil });
+});
+
+// 设置用户名：供「老账号 / 管理员手动开通后本人认领」但尚未设置用户名的登录用户使用。
+// 用户名一经设定即作为站内唯一身份，不在此处修改（如需改名请联系管理员）。
+app.post("/api/access/username", requireVisitor, async (req, res) => {
+  if (!req.visitor) {
+    return res.status(400).json({ message: "请使用账号登录后再设置用户名。" });
+  }
+  const username = normalizeUsername(req.body?.username);
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ message: "用户名需为 2~20 位的中文、字母、数字、下划线或连字符。" });
+  }
+  if (isReservedUsername(username)) {
+    return res.status(400).json({ message: "该用户名为保留名，请换一个。" });
+  }
+  try {
+    const { data: row, error: selErr } = await supabase
+      .from("visitors")
+      .select("username")
+      .eq("email", req.visitor.email)
+      .maybeSingle();
+    if (selErr) {
+      if (isMissingColumn(selErr)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.username 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw selErr;
+    }
+    if (row && row.username) {
+      return res.json({ username: row.username, already: true });
+    }
+
+    const { data: taken, error: takenErr } = await supabase
+      .from("visitors")
+      .select("email")
+      .eq("username", username)
+      .maybeSingle();
+    if (takenErr && !isMissingColumn(takenErr)) throw takenErr;
+    if (taken && taken.email !== req.visitor.email) {
+      return res.status(409).json({ message: "该用户名已被使用，请换一个。" });
+    }
+
+    const { error } = await supabase
+      .from("visitors")
+      .update({ username })
+      .eq("email", req.visitor.email);
+    if (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({ message: "该用户名已被使用，请换一个。" });
+      }
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.username 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw error;
+    }
+    return res.json({ username });
+  } catch (error) {
+    console.error("Set username failed:", error.message);
+    return res.status(500).json({ message: "设置用户名失败，请稍后再试。" });
+  }
 });
 
 app.post("/api/access/register", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
+  const username = normalizeUsername(req.body?.username);
 
   if (!isValidEmail(email)) return res.status(400).json({ message: "邮箱格式不正确。" });
   if (!isAllowedEmailDomain(email)) {
     return res.status(400).json({ message: "仅支持 Gmail / Outlook / QQ / 163 邮箱注册。" });
+  }
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ message: "用户名需为 2~20 位的中文、字母、数字、下划线或连字符。" });
+  }
+  if (isReservedUsername(username)) {
+    return res.status(400).json({ message: "该用户名为保留名，请换一个。" });
   }
   if (password.length < 8 || password.length > 128) {
     return res.status(400).json({ message: "密码长度需为 8~128 位。" });
@@ -1370,17 +1496,42 @@ app.post("/api/access/register", async (req, res) => {
     if (existing.password_hash) {
       return res.status(409).json({ message: "该邮箱已注册，请直接登录。" });
     }
+
+    // 用户名唯一性预检（真正的唯一性由数据库 lower(username) 唯一索引兜底）。
+    const { data: taken, error: takenErr } = await supabase
+      .from("visitors")
+      .select("email")
+      .eq("username", username)
+      .maybeSingle();
+    if (takenErr) {
+      if (isMissingColumn(takenErr)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.username 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw takenErr;
+    }
+    if (taken && taken.email !== email) {
+      return res.status(409).json({ message: "该用户名已被使用，请换一个。" });
+    }
+
     const { error } = await supabase
       .from("visitors")
-      .update({ password_hash: hashPassword(password) })
+      .update({ password_hash: hashPassword(password), username })
       .eq("email", email);
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        return res.status(409).json({ message: "该用户名已被使用，请换一个。" });
+      }
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors.username 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error("Register failed:", error.message);
     return res.status(500).json({ message: "注册失败，请稍后再试。" });
   }
 
-  return res.status(201).json({ token: createVisitorToken(email), email });
+  return res.status(201).json({ token: createVisitorToken(email), email, username });
 });
 
 app.post("/api/access/login", async (req, res) => {
@@ -2098,12 +2249,267 @@ app.delete("/api/projects/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ===== 论坛：有账号的用户可发表文章 / 帖子并互相讨论（登录即可，管理员亦可参与）=====
+
+const forumWriteByEmail = new Map();
+const FORUM_WINDOW_MS = 60 * 60 * 1000;
+const FORUM_POST_MAX = 30; // 每小时每账号最多发帖数
+const FORUM_REPLY_MAX = 120; // 每小时每账号最多回复数
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of forumWriteByEmail) if (now - v.start > FORUM_WINDOW_MS) forumWriteByEmail.delete(k);
+}, FORUM_WINDOW_MS).unref();
+
+// 帖子列表（含每帖回复数）。倒序，最多 200 条。
+app.get("/api/forum/posts", requireVisitor, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("forum_posts")
+      .select("id, author_email, author_username, title, content, created_at, updated_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ posts: [], needsMigration: true });
+      throw error;
+    }
+
+    const posts = data || [];
+    const counts = {};
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps, error: repErr } = await supabase
+        .from("forum_replies")
+        .select("post_id")
+        .in("post_id", ids);
+      if (!repErr && Array.isArray(reps)) {
+        for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      }
+    }
+
+    const me = await getForumActor(req);
+    const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    return res.json({
+      posts: posts.map((p) => ({
+        id: p.id,
+        authorUsername: p.author_username,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        replyCount: counts[p.id] || 0,
+        canDelete: canDelete(p.author_email),
+      })),
+    });
+  } catch (error) {
+    console.error("List forum posts failed:", error.message);
+    return res.status(500).json({ message: "加载帖子失败，请稍后再试。" });
+  }
+});
+
+// 帖子详情 + 全部回复。
+app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
+  try {
+    const { data: post, error } = await supabase
+      .from("forum_posts")
+      .select("*")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "帖子不存在。" });
+      throw error;
+    }
+    if (!post) return res.status(404).json({ message: "帖子不存在。" });
+
+    const { data: replies, error: repErr } = await supabase
+      .from("forum_replies")
+      .select("*")
+      .eq("post_id", post.id)
+      .order("created_at", { ascending: true });
+    if (repErr) throw repErr;
+
+    const me = await getForumActor(req);
+    const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    return res.json({
+      post: {
+        id: post.id,
+        authorUsername: post.author_username,
+        title: post.title,
+        content: post.content,
+        createdAt: post.created_at,
+        updatedAt: post.updated_at,
+        canDelete: canDelete(post.author_email),
+      },
+      replies: (replies || []).map((r) => ({
+        id: r.id,
+        authorUsername: r.author_username,
+        content: r.content,
+        createdAt: r.created_at,
+        canDelete: canDelete(r.author_email),
+      })),
+    });
+  } catch (error) {
+    console.error("Read forum post failed:", error.message);
+    return res.status(500).json({ message: "加载帖子失败，请稍后再试。" });
+  }
+});
+
+// 发表新帖（发表文章 / 讨论主题）。
+app.post("/api/forum/posts", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  if (!actor.username) {
+    return res.status(403).json({ message: "请先设置用户名后再发帖。", code: "USERNAME_REQUIRED" });
+  }
+  const title = String(req.body?.title || "").trim();
+  const content = String(req.body?.content || "").trim();
+  if (!title || !content) return res.status(400).json({ message: "请填写标题和内容。" });
+  if (title.length > 120) return res.status(400).json({ message: "标题不超过 120 字。" });
+  if (content.length > 20000) return res.status(400).json({ message: "内容过长（上限 20000 字）。" });
+
+  const key = actor.email || "admin";
+  if (!hitWindow(forumWriteByEmail, `post:${key}`, FORUM_WINDOW_MS, FORUM_POST_MAX)) {
+    return res.status(429).json({ message: "发帖过于频繁，请稍后再试。" });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("forum_posts")
+      .insert({ author_email: actor.email, author_username: actor.username, title, content })
+      .select("id, author_username, title, content, created_at, updated_at")
+      .single();
+    if (error) {
+      if (isMissingForumTable(error)) {
+        return res.status(409).json({ message: "论坛功能尚未初始化，请先在 Supabase 执行 forum 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw error;
+    }
+    return res.status(201).json({
+      id: data.id,
+      authorUsername: data.author_username,
+      title: data.title,
+      content: data.content,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      canDelete: true,
+    });
+  } catch (error) {
+    console.error("Create forum post failed:", error.message);
+    return res.status(500).json({ message: "发帖失败，请稍后再试。" });
+  }
+});
+
+// 在帖子下回复（讨论）。
+app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  if (!actor.username) {
+    return res.status(403).json({ message: "请先设置用户名后再回复。", code: "USERNAME_REQUIRED" });
+  }
+  const content = String(req.body?.content || "").trim();
+  if (!content) return res.status(400).json({ message: "请填写回复内容。" });
+  if (content.length > 5000) return res.status(400).json({ message: "回复过长（上限 5000 字）。" });
+
+  const key = actor.email || "admin";
+  if (!hitWindow(forumWriteByEmail, `reply:${key}`, FORUM_WINDOW_MS, FORUM_REPLY_MAX)) {
+    return res.status(429).json({ message: "回复过于频繁，请稍后再试。" });
+  }
+
+  try {
+    const { data: post, error: pErr } = await supabase
+      .from("forum_posts")
+      .select("id")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (pErr) {
+      if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
+      throw pErr;
+    }
+    if (!post) return res.status(404).json({ message: "帖子不存在。" });
+
+    const { data, error } = await supabase
+      .from("forum_replies")
+      .insert({ post_id: post.id, author_email: actor.email, author_username: actor.username, content })
+      .select("id, author_username, content, created_at")
+      .single();
+    if (error) throw error;
+    return res.status(201).json({
+      id: data.id,
+      authorUsername: data.author_username,
+      content: data.content,
+      createdAt: data.created_at,
+      canDelete: true,
+    });
+  } catch (error) {
+    console.error("Create reply failed:", error.message);
+    return res.status(500).json({ message: "回复失败，请稍后再试。" });
+  }
+});
+
+// 删除帖子（作者本人或管理员）。回复随之级联删除。
+app.delete("/api/forum/posts/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    const { data: post, error } = await supabase
+      .from("forum_posts")
+      .select("author_email")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "帖子不存在。" });
+      throw error;
+    }
+    if (!post) return res.status(404).json({ message: "帖子不存在。" });
+    if (!actor.isAdmin && !(actor.email && post.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能删除自己的帖子。" });
+    }
+    const { error: delErr } = await supabase.from("forum_posts").delete().eq("id", req.params.id);
+    if (delErr) throw delErr;
+    return res.json({ deleted: true });
+  } catch (error) {
+    console.error("Delete forum post failed:", error.message);
+    return res.status(500).json({ message: "删除失败，请稍后再试。" });
+  }
+});
+
+// 删除回复（作者本人或管理员）。
+app.delete("/api/forum/replies/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    const { data: reply, error } = await supabase
+      .from("forum_replies")
+      .select("author_email")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "回复不存在。" });
+      throw error;
+    }
+    if (!reply) return res.status(404).json({ message: "回复不存在。" });
+    if (!actor.isAdmin && !(actor.email && reply.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能删除自己的回复。" });
+    }
+    const { error: delErr } = await supabase.from("forum_replies").delete().eq("id", req.params.id);
+    if (delErr) throw delErr;
+    return res.json({ deleted: true });
+  } catch (error) {
+    console.error("Delete reply failed:", error.message);
+    return res.status(500).json({ message: "删除失败，请稍后再试。" });
+  }
+});
+
 app.get("/projects", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "projects.html"));
 });
 
 app.get("/contact", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "contact.html"));
+});
+
+app.get("/forum", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "forum.html"));
 });
 
 app.get("/welcome", (req, res) => {

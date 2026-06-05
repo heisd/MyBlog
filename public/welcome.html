@@ -166,6 +166,7 @@
       <a class="brand" href="/">Heisd.Stark</a>
       <nav class="nav">
         <a href="/">首页</a>
+        <a href="/forum">论坛</a>
         <a href="/contact">联系我</a>
         <a href="/admin-login">进入后台</a>
       </nav>
@@ -201,6 +202,9 @@
         <label>邮箱
           <input type="email" id="reg-email" autocomplete="email" required>
         </label>
+        <label>用户名（论坛公开身份，唯一）
+          <input type="text" id="reg-username" autocomplete="username" maxlength="20" placeholder="2~20 位中文 / 字母 / 数字 / 下划线" required>
+        </label>
         <label>设置密码（≥ 8 位）
           <input type="password" id="reg-password" autocomplete="new-password" required>
         </label>
@@ -219,6 +223,7 @@
     <div class="auth-card entered" id="entered" hidden>
       <p class="who" id="who"></p>
       <a class="button button-primary" href="/projects" id="enter-btn">进入项目归档 →</a>
+      <p style="margin-top:12px;"><a class="button button-secondary" href="/forum">进入论坛讨论 →</a></p>
 
       <div class="pay-panel" id="pay-panel" hidden>
         <button type="button" class="pay-toggle" id="pay-toggle">⭐ 开通 / 续费会员</button>
@@ -365,14 +370,19 @@
       return at >= 0 && ALLOWED_EMAIL_DOMAINS.includes(email.slice(at + 1).toLowerCase());
     }
 
-    // 注册提交（仅邮箱 + 密码；该邮箱需已由管理员审批放行）
+    // 用户名规则（与后端保持一致）：2~20 位中文 / 字母 / 数字 / 下划线 / 连字符。
+    const USERNAME_RE = /^[一-龥A-Za-z0-9_-]{2,20}$/;
+
+    // 注册提交（邮箱 + 用户名 + 密码；该邮箱需已由管理员审批放行）
     registerForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = document.getElementById("reg-email").value.trim();
+      const username = document.getElementById("reg-username").value.trim();
       const pw = document.getElementById("reg-password").value;
       const pw2 = document.getElementById("reg-password2").value;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(regMsg, "请输入有效的邮箱地址。", "error"); return; }
       if (!emailDomainAllowed(email)) { setMsg(regMsg, "仅支持 Gmail / Outlook / QQ / 163 邮箱。", "error"); return; }
+      if (!USERNAME_RE.test(username)) { setMsg(regMsg, "用户名需为 2~20 位的中文、字母、数字、下划线或连字符。", "error"); return; }
       if (pw.length < 8) { setMsg(regMsg, "密码至少 8 位。", "error"); return; }
       if (pw !== pw2) { setMsg(regMsg, "两次输入的密码不一致。", "error"); return; }
       const submitBtn = registerForm.querySelector('button[type="submit"]');
@@ -381,7 +391,7 @@
       try {
         const res = await fetch(`${API_BASE}/api/access/register`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password: pw, ...humanPayload("register") }),
+          body: JSON.stringify({ email, username, password: pw, ...humanPayload("register") }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { setMsg(regMsg, data.message || "注册失败。", "error"); submitBtn.disabled = false; resetTurnstile("register"); return; }
@@ -429,7 +439,7 @@
         const res = await fetch(`${API_BASE}/api/access/verify`, { headers: { "X-Access-Token": token } });
         if (!res.ok) { localStorage.removeItem(TOKEN_KEY); return; }
         const data = await res.json();
-        let who = `已登录：${data.email}`;
+        let who = data.username ? `已登录：${data.username}（${data.email}）` : `已登录：${data.email}`;
         if (data.member) {
           const until = data.memberUntil ? new Date(data.memberUntil).toLocaleDateString("zh-CN") : "";
           who += `　·　会员${until ? `（${until} 到期）` : ""}`;

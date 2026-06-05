@@ -9,6 +9,10 @@
       "destination": "/contact.html"
     },
     {
+      "source": "/forum",
+      "destination": "/forum.html"
+    },
+    {
       "source": "/welcome",
       "destination": "/welcome.html"
     },

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>论坛 | Heisd.Stark</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --paper: rgba(255, 253, 247, 0.92);
+      --card: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #6b625b;
+      --accent: #cc6a2d;
+      --accent-dark: #8e4317;
+      --line: #e5dbcf;
+      --danger: #b91c1c;
+      --shadow: 0 22px 50px rgba(68, 48, 30, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(248, 244, 237, 0.78);
+      border-bottom: 1px solid rgba(229, 219, 207, 0.9);
+    }
+    .topbar-inner {
+      max-width: 1000px; margin: 0 auto; padding: 18px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+    }
+    .brand { font-weight: 700; color: var(--accent-dark); text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.95rem; }
+    .nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    .nav a { color: var(--muted); text-decoration: none; font-size: 0.96rem; font-weight: 700; }
+    .nav a:hover { color: var(--accent-dark); }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+    .hero {
+      background: var(--paper); border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 26px; padding: 36px 40px; margin-bottom: 24px; box-shadow: var(--shadow);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    }
+    .eyebrow { letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-dark); font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+    .hero h1 { margin: 0 0 10px; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.05; }
+    .hero p { margin: 0; max-width: 60ch; color: var(--muted); line-height: 1.8; }
+    .me { color: var(--muted); font-size: 0.9rem; white-space: nowrap; }
+    .me b { color: var(--accent-dark); }
+
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 20px; border-radius: 999px; border: none; cursor: pointer;
+      font: inherit; font-weight: 700; text-decoration: none; color: var(--ink);
+      transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+    }
+    .button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .button-primary { background: linear-gradient(120deg, #cc6a2d, #e0883f, #8e4317, #cc6a2d); background-size: 300% 100%; color: #fff; animation: btn-flow 6s ease infinite; }
+    .button-primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(204,106,45,0.4); }
+    .button-secondary { background: rgba(255,255,255,0.85); border: 1px solid var(--line); }
+    .button-secondary:not(:disabled):hover { transform: translateY(-1px); }
+    .button-ghost { background: none; padding: 8px 12px; color: var(--muted); font-size: 0.86rem; }
+    .button-ghost:hover { color: var(--accent-dark); }
+    .button-danger { color: var(--danger); }
+    @keyframes btn-flow { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+    .toolbar { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+
+    .panel {
+      background: var(--card); border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 20px; box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 20px;
+    }
+    .panel h2 { margin: 0 0 14px; font-size: 1.25rem; }
+    .field { display: grid; gap: 6px; margin-bottom: 14px; }
+    .field label { font-weight: 700; font-size: 0.92rem; }
+    .field input, .field textarea {
+      width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: #fffefb; color: var(--ink); font: inherit; font-size: 1rem; resize: vertical;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .field textarea { min-height: 160px; line-height: 1.7; }
+    .field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
+    .form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .msg { min-height: 18px; font-size: 0.9rem; line-height: 1.6; color: var(--muted); }
+    .msg.error { color: var(--danger); }
+    .msg.success { color: #2f6b30; }
+
+    .post-card {
+      background: var(--card); border: 1px solid rgba(229, 219, 207, 0.96);
+      border-radius: 18px; box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 16px;
+      cursor: pointer; transition: transform 180ms ease, box-shadow 180ms ease;
+      animation: card-in 500ms ease backwards; animation-delay: calc(var(--i,0) * 50ms);
+    }
+    .post-card:hover { transform: translateY(-3px); box-shadow: 0 24px 48px rgba(68,48,30,0.14); }
+    @keyframes card-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .post-card h3 { margin: 0 0 8px; font-size: 1.3rem; line-height: 1.3; }
+    .post-meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .post-meta .author { color: var(--accent-dark); font-weight: 700; }
+    .post-excerpt { margin: 0; color: var(--muted); line-height: 1.8; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; background: rgba(204,106,45,0.12); color: var(--accent-dark); font-size: 0.78rem; font-weight: 700; }
+
+    .post-body { white-space: pre-wrap; word-break: break-word; line-height: 1.9; color: var(--ink); font-size: 1.05rem; margin: 0; }
+    .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .detail-head h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin: 0 0 8px; }
+    .replies-title { margin: 8px 0 16px; font-size: 1.1rem; color: var(--accent-dark); }
+    .reply {
+      border-top: 1px solid var(--line); padding: 16px 0;
+    }
+    .reply:first-of-type { border-top: none; }
+    .reply-meta { font-size: 0.84rem; color: var(--muted); margin-bottom: 8px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .reply-meta .author { color: var(--accent-dark); font-weight: 700; }
+    .reply-body { white-space: pre-wrap; word-break: break-word; line-height: 1.8; margin: 0; color: var(--ink); }
+
+    .empty, .error, .loading {
+      background: var(--paper); border: 1px dashed var(--line); border-radius: 18px;
+      padding: 30px; color: var(--muted); line-height: 1.8; text-align: center;
+    }
+    .error { color: var(--danger); border-color: rgba(185,28,28,0.4); }
+    [hidden] { display: none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      .button, .post-card { transition: none; animation: none; }
+      .button-primary { animation: none; }
+      .post-card:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/projects">项目归档</a>
+        <a href="/forum">论坛</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Community Forum</div>
+        <h1>论坛</h1>
+        <p>这里是有账号用户的交流空间，你可以发表文章、分享笔记，也可以在帖子下参与讨论。请友善交流。</p>
+      </div>
+      <div class="me" id="me"></div>
+    </section>
+
+    <!-- 需要设置用户名（老账号 / 管理员手动开通后本人认领但还没起名）-->
+    <section class="panel" id="username-gate" hidden>
+      <h2>先给自己起个用户名</h2>
+      <p class="msg">用户名是你在论坛里的公开身份，全站唯一，设置后即可发帖和讨论。</p>
+      <div class="field">
+        <label for="set-username">用户名</label>
+        <input type="text" id="set-username" maxlength="20" placeholder="2~20 位中文 / 字母 / 数字 / 下划线" autocomplete="username">
+      </div>
+      <div class="form-actions">
+        <button type="button" class="button button-primary" id="set-username-btn">保存用户名</button>
+        <span class="msg" id="set-username-msg"></span>
+      </div>
+    </section>
+
+    <!-- 列表视图 -->
+    <section id="list-view">
+      <div class="toolbar">
+        <button type="button" class="button button-primary" id="compose-toggle" hidden>✍ 发表新帖</button>
+      </div>
+
+      <section class="panel" id="compose-panel" hidden>
+        <h2>发表新帖</h2>
+        <div class="field">
+          <label for="post-title">标题</label>
+          <input type="text" id="post-title" maxlength="120" placeholder="给你的文章 / 话题起个标题">
+        </div>
+        <div class="field">
+          <label for="post-content">正文</label>
+          <textarea id="post-content" maxlength="20000" placeholder="在这里写下你的文章或想讨论的内容…"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="button button-primary" id="post-submit">发布</button>
+          <button type="button" class="button button-ghost" id="compose-cancel">取消</button>
+          <span class="msg" id="post-msg"></span>
+        </div>
+      </section>
+
+      <div id="posts"></div>
+    </section>
+
+    <!-- 详情视图 -->
+    <section id="detail-view" hidden>
+      <div class="toolbar" style="justify-content:flex-start;">
+        <button type="button" class="button button-secondary" id="back-btn">← 返回列表</button>
+      </div>
+      <article class="panel" id="detail-post"></article>
+
+      <section class="panel">
+        <h3 class="replies-title" id="replies-title">讨论</h3>
+        <div id="replies"></div>
+
+        <div class="field" style="margin-top:18px;">
+          <label for="reply-content">写下你的回复</label>
+          <textarea id="reply-content" maxlength="5000" placeholder="参与讨论…" style="min-height:110px;"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="button button-primary" id="reply-submit">回复</button>
+          <span class="msg" id="reply-msg"></span>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const VISITOR_KEY = "visitorAccessToken";
+    const ADMIN_KEY = "adminToken";
+
+    let me = null;          // { email, username, isAdmin }
+    let currentPostId = null;
+
+    function token(key) { return localStorage.getItem(key); }
+    function accessHeaders(extra) {
+      const headers = Object.assign({}, extra || {});
+      const v = token(VISITOR_KEY); if (v) headers["X-Access-Token"] = v;
+      const a = token(ADMIN_KEY); if (a) headers["Authorization"] = "Bearer " + a;
+      return headers;
+    }
+
+    function escapeHtml(text) {
+      return String(text ?? "")
+        .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+    }
+    function fmtDate(value) {
+      if (!value) return "";
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    function setMsg(el, text, type = "") {
+      el.textContent = text || "";
+      el.className = "msg" + (type ? " " + type : "");
+    }
+    const USERNAME_RE = /^[一-龥A-Za-z0-9_-]{2,20}$/;
+
+    // 冷启动重试（与项目页一致：免费实例闲置后首访需要 30~60 秒唤醒）。
+    const RETRY_DELAYS = [1500, 2500, 4000, 6000, 8000, 10000];
+    const COLD = new Set([502, 503, 504]);
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function api(path, options = {}, { retries = 6, onWaking } = {}) {
+      let lastError;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const res = await fetch(API_BASE + path, options);
+          const raw = await res.text();
+          let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+          if (COLD.has(res.status) && data === null && attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          return { ok: res.ok, status: res.status, data };
+        } catch (error) {
+          lastError = error;
+          if (attempt < retries) {
+            if (onWaking) onWaking(attempt + 1);
+            await delay(RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+            continue;
+          }
+          throw lastError;
+        }
+      }
+    }
+
+    // ---- 会话：确认登录身份；未登录跳到 /welcome ----
+    async function loadSession() {
+      const v = token(VISITOR_KEY);
+      const a = token(ADMIN_KEY);
+      try {
+        if (v) {
+          const res = await api("/api/access/verify", { headers: accessHeaders() });
+          if (res.ok && res.data && res.data.authenticated) {
+            me = { email: res.data.email, username: res.data.username || null, isAdmin: false };
+            return true;
+          }
+          localStorage.removeItem(VISITOR_KEY);
+        }
+        if (a) {
+          const res = await api("/api/auth/verify", { headers: accessHeaders() });
+          if (res.ok && res.data && res.data.authenticated) {
+            me = { email: null, username: res.data.username || "管理员", isAdmin: true };
+            return true;
+          }
+          localStorage.removeItem(ADMIN_KEY);
+        }
+      } catch {}
+      return false;
+    }
+
+    function renderMe() {
+      const el = document.getElementById("me");
+      if (!me) { el.textContent = ""; return; }
+      if (me.username) {
+        el.innerHTML = `登录身份：<b>${escapeHtml(me.username)}</b>${me.isAdmin ? "（站长）" : ""}`;
+      } else {
+        el.textContent = "登录身份：尚未设置用户名";
+      }
+    }
+
+    // ---- 设置用户名（老账号补设）----
+    function showUsernameGate(show) {
+      document.getElementById("username-gate").hidden = !show;
+      document.getElementById("compose-toggle").hidden = show || !me;
+    }
+    async function submitUsername() {
+      const input = document.getElementById("set-username");
+      const msg = document.getElementById("set-username-msg");
+      const btn = document.getElementById("set-username-btn");
+      const username = input.value.trim();
+      if (!USERNAME_RE.test(username)) { setMsg(msg, "用户名需为 2~20 位的中文、字母、数字、下划线或连字符。", "error"); return; }
+      btn.disabled = true; setMsg(msg, "正在保存…");
+      try {
+        const res = await api("/api/access/username", {
+          method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ username }),
+        });
+        if (!res.ok) { setMsg(msg, (res.data && res.data.message) || "保存失败。", "error"); btn.disabled = false; return; }
+        me.username = res.data.username;
+        setMsg(msg, "已保存 ✓", "success");
+        renderMe();
+        showUsernameGate(false);
+      } catch {
+        setMsg(msg, "网络异常，请稍后再试。", "error");
+        btn.disabled = false;
+      }
+    }
+
+    // ---- 视图切换 ----
+    function showList() {
+      currentPostId = null;
+      document.getElementById("detail-view").hidden = true;
+      document.getElementById("list-view").hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    function showDetail() {
+      document.getElementById("list-view").hidden = true;
+      document.getElementById("detail-view").hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // ---- 帖子列表 ----
+    function postCardHtml(p, i) {
+      return `
+        <article class="post-card" data-id="${escapeHtml(p.id)}" style="--i:${i}">
+          <h3>${escapeHtml(p.title)}</h3>
+          <div class="post-meta">
+            <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
+            <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+            <span class="badge">💬 ${p.replyCount || 0}</span>
+          </div>
+          <p class="post-excerpt">${escapeHtml(p.excerpt || "")}</p>
+        </article>`;
+    }
+
+    async function loadPosts() {
+      const wrap = document.getElementById("posts");
+      wrap.innerHTML = `<div class="loading">正在加载帖子…</div>`;
+      try {
+        const res = await api("/api/forum/posts", { headers: accessHeaders() }, {
+          onWaking: (n) => { wrap.innerHTML = `<div class="loading">服务器正在唤醒，请稍候…（第 ${n} 次重试）<br>免费服务器闲置后会休眠，首次访问需要 30~60 秒。</div>`; },
+        });
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (!res.ok) throw new Error((res.data && res.data.message) || "加载失败。");
+        if (res.data && res.data.needsMigration) {
+          wrap.innerHTML = `<div class="error">论坛功能尚未初始化。请先在 Supabase 执行 <b>data/migration-add-forum.sql</b> 后刷新本页。</div>`;
+          return;
+        }
+        const posts = (res.data && res.data.posts) || [];
+        if (!posts.length) { wrap.innerHTML = `<div class="empty">还没有帖子，来发表第一篇吧。</div>`; return; }
+        wrap.innerHTML = posts.map((p, i) => postCardHtml(p, i)).join("");
+      } catch (error) {
+        wrap.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    // ---- 发帖 ----
+    async function submitPost() {
+      const title = document.getElementById("post-title").value.trim();
+      const content = document.getElementById("post-content").value.trim();
+      const msg = document.getElementById("post-msg");
+      const btn = document.getElementById("post-submit");
+      if (!title) { setMsg(msg, "请填写标题。", "error"); return; }
+      if (!content) { setMsg(msg, "请填写正文。", "error"); return; }
+      btn.disabled = true; setMsg(msg, "正在发布…");
+      try {
+        const res = await api("/api/forum/posts", {
+          method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ title, content }),
+        });
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (res.status === 403 && res.data && res.data.code === "USERNAME_REQUIRED") {
+          setMsg(msg, "请先设置用户名。", "error"); btn.disabled = false; showUsernameGate(true); return;
+        }
+        if (!res.ok) { setMsg(msg, (res.data && res.data.message) || "发布失败。", "error"); btn.disabled = false; return; }
+        document.getElementById("post-title").value = "";
+        document.getElementById("post-content").value = "";
+        setMsg(msg, "");
+        document.getElementById("compose-panel").hidden = true;
+        btn.disabled = false;
+        await loadPosts();
+      } catch {
+        setMsg(msg, "网络异常，请稍后再试。", "error");
+        btn.disabled = false;
+      }
+    }
+
+    // ---- 帖子详情 + 回复 ----
+    function detailPostHtml(p) {
+      return `
+        <div class="detail-head">
+          <div>
+            <h2>${escapeHtml(p.title)}</h2>
+            <div class="post-meta">
+              <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
+              <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+            </div>
+          </div>
+          ${p.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-post="${escapeHtml(p.id)}">删除帖子</button>` : ""}
+        </div>
+        <p class="post-body">${escapeHtml(p.content)}</p>`;
+    }
+    function replyHtml(r) {
+      return `
+        <div class="reply" data-reply="${escapeHtml(r.id)}">
+          <div class="reply-meta">
+            <span class="author">${escapeHtml(r.authorUsername || "匿名")}</span>
+            <span>${escapeHtml(fmtDate(r.createdAt))}</span>
+            ${r.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-reply="${escapeHtml(r.id)}" style="padding:2px 8px;">删除</button>` : ""}
+          </div>
+          <p class="reply-body">${escapeHtml(r.content)}</p>
+        </div>`;
+    }
+
+    async function openPost(id) {
+      currentPostId = id;
+      showDetail();
+      const postEl = document.getElementById("detail-post");
+      const repliesEl = document.getElementById("replies");
+      postEl.innerHTML = `<div class="loading">正在加载…</div>`;
+      repliesEl.innerHTML = "";
+      try {
+        const res = await api("/api/forum/posts/" + encodeURIComponent(id), { headers: accessHeaders() });
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (res.status === 404) { postEl.innerHTML = `<div class="error">帖子不存在或已被删除。</div>`; return; }
+        if (!res.ok) throw new Error((res.data && res.data.message) || "加载失败。");
+        postEl.innerHTML = detailPostHtml(res.data.post);
+        const replies = res.data.replies || [];
+        document.getElementById("replies-title").textContent = `讨论（${replies.length}）`;
+        repliesEl.innerHTML = replies.length ? replies.map(replyHtml).join("") : `<div class="empty">还没有回复，来抢沙发。</div>`;
+      } catch (error) {
+        postEl.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function submitReply() {
+      if (!currentPostId) return;
+      const ta = document.getElementById("reply-content");
+      const msg = document.getElementById("reply-msg");
+      const btn = document.getElementById("reply-submit");
+      const content = ta.value.trim();
+      if (!content) { setMsg(msg, "请填写回复内容。", "error"); return; }
+      btn.disabled = true; setMsg(msg, "正在提交…");
+      try {
+        const res = await api("/api/forum/posts/" + encodeURIComponent(currentPostId) + "/replies", {
+          method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ content }),
+        });
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (res.status === 403 && res.data && res.data.code === "USERNAME_REQUIRED") {
+          setMsg(msg, "请先设置用户名。", "error"); btn.disabled = false; showList(); showUsernameGate(true); return;
+        }
+        if (!res.ok) { setMsg(msg, (res.data && res.data.message) || "回复失败。", "error"); btn.disabled = false; return; }
+        ta.value = ""; setMsg(msg, "");
+        btn.disabled = false;
+        await openPost(currentPostId);
+      } catch {
+        setMsg(msg, "网络异常，请稍后再试。", "error");
+        btn.disabled = false;
+      }
+    }
+
+    async function deletePost(id) {
+      if (!confirm("确定删除这篇帖子吗？该帖子下的回复也会一并删除。")) return;
+      try {
+        const res = await api("/api/forum/posts/" + encodeURIComponent(id), { method: "DELETE", headers: accessHeaders() });
+        if (!res.ok) { alert((res.data && res.data.message) || "删除失败。"); return; }
+        showList();
+        await loadPosts();
+      } catch { alert("网络异常，请稍后再试。"); }
+    }
+    async function deleteReply(id) {
+      if (!confirm("确定删除这条回复吗？")) return;
+      try {
+        const res = await api("/api/forum/replies/" + encodeURIComponent(id), { method: "DELETE", headers: accessHeaders() });
+        if (!res.ok) { alert((res.data && res.data.message) || "删除失败。"); return; }
+        await openPost(currentPostId);
+      } catch { alert("网络异常，请稍后再试。"); }
+    }
+
+    // ---- 事件绑定 ----
+    document.getElementById("set-username-btn").addEventListener("click", submitUsername);
+    document.getElementById("compose-toggle").addEventListener("click", () => {
+      const panel = document.getElementById("compose-panel");
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) document.getElementById("post-title").focus();
+    });
+    document.getElementById("compose-cancel").addEventListener("click", () => {
+      document.getElementById("compose-panel").hidden = true;
+      setMsg(document.getElementById("post-msg"), "");
+    });
+    document.getElementById("post-submit").addEventListener("click", submitPost);
+    document.getElementById("back-btn").addEventListener("click", showList);
+    document.getElementById("reply-submit").addEventListener("click", submitReply);
+
+    document.getElementById("posts").addEventListener("click", (e) => {
+      const card = e.target.closest(".post-card");
+      if (card) openPost(card.dataset.id);
+    });
+    document.getElementById("detail-post").addEventListener("click", (e) => {
+      const delBtn = e.target.closest("[data-del-post]");
+      if (delBtn) deletePost(delBtn.getAttribute("data-del-post"));
+    });
+    document.getElementById("replies").addEventListener("click", (e) => {
+      const delBtn = e.target.closest("[data-del-reply]");
+      if (delBtn) deleteReply(delBtn.getAttribute("data-del-reply"));
+    });
+
+    // ---- 初始化 ----
+    (async function init() {
+      const ok = await loadSession();
+      if (!ok) { window.location.href = "/welcome"; return; }
+      renderMe();
+      // 已登录但还没用户名 → 先引导设置；否则可发帖。
+      showUsernameGate(!me.username);
+      await loadPosts();
+    })();
+  </script>
+  <script src="/assistant.js" defer></script>
+</body>
+</html>
