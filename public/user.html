@@ -41,6 +41,11 @@
     .pname { font-size: 1.7rem; font-weight: 800; color: var(--accent-dark); margin: 0; line-height: 1.1; }
     .pmeta { color: var(--muted); font-size: 0.9rem; margin: 6px 0 0; }
     .pbio { margin: 12px 0 0; color: var(--ink); line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+    .stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 0; }
+    .stat { display: inline-flex; flex-direction: column; align-items: center; min-width: 76px; padding: 8px 14px;
+      background: rgba(204,106,45,0.08); border: 1px solid var(--line); border-radius: 12px; }
+    .stat b { font-size: 1.25rem; color: var(--accent-dark); line-height: 1; }
+    .stat span { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
 
     .sec-title { font-size: 1.2rem; margin: 6px 2px 14px; color: var(--accent-dark); }
     .post-card { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px;
@@ -150,8 +155,13 @@
           <img class="avatar-lg" src="${escapeHtml(u.avatar || AVATAR_PH)}" alt="${escapeHtml(u.username)}" onerror="imgFallback(this)">
           <div style="flex:1 1 240px;">
             <h1 class="pname">${escapeHtml(u.username)}</h1>
-            <p class="pmeta">${since}${u.postCount || 0} 篇已发布文章</p>
+            <p class="pmeta">${since}活跃创作者</p>
             <p class="pbio">${u.bio ? escapeHtml(u.bio) : "这位用户还没有填写自我介绍。"}</p>
+            <div class="stat-row">
+              <span class="stat"><b>${u.postCount || 0}</b><span>已发布文章</span></span>
+              <span class="stat"><b>${u.totalLikes || 0}</b><span>获赞</span></span>
+              <span class="stat"><b>${u.totalReplies || 0}</b><span>收到讨论</span></span>
+            </div>
           </div>
         </div>`;
     }

@@ -2772,12 +2772,15 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
 
     const counts = {};
     const likeCounts = {};
+    let totalReplies = 0;
+    let totalLikes = 0;
     if (posts.length) {
       const ids = posts.map((p) => p.id);
       const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
       if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
       const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
       if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+      for (const p of posts) { totalReplies += counts[p.id] || 0; totalLikes += likeCounts[p.id] || 0; }
     }
 
     return res.json({
@@ -2787,6 +2790,8 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
         bio: v.bio || null,
         joinedAt: v.created_at || null,
         postCount: posts.length,
+        totalLikes,
+        totalReplies,
       },
       posts: posts.map((p) => ({
         id: p.id,
