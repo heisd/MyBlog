@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+  <!-- highlight.js：源码语法高亮（CDN，加载失败时降级为纯文本） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/atom-one-dark.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #f4efe7;
@@ -971,6 +974,46 @@
       }
     }
 
+    // 根据文件名/扩展名推断 highlight.js 语言
+    function cvLanguageFor(path) {
+      const name = (path.split("/").pop() || "").toLowerCase();
+      if (name === "dockerfile") return "dockerfile";
+      if (name === "makefile" || name === "gnumakefile") return "makefile";
+      const ext = name.includes(".") ? name.split(".").pop() : "";
+      const map = {
+        js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+        ts: "typescript", tsx: "typescript", py: "python", rb: "ruby", go: "go",
+        rs: "rust", java: "java", kt: "kotlin", swift: "swift", scala: "scala",
+        c: "c", h: "c", cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp", cs: "csharp",
+        php: "php", sh: "bash", bash: "bash", zsh: "bash", ps1: "powershell",
+        json: "json", xml: "xml", html: "xml", htm: "xml", svg: "xml", vue: "xml",
+        css: "css", scss: "scss", sass: "scss", less: "less",
+        yml: "yaml", yaml: "yaml", toml: "ini", ini: "ini", cfg: "ini", conf: "ini",
+        md: "markdown", markdown: "markdown", sql: "sql", lua: "lua", r: "r",
+        pl: "perl", pm: "perl", diff: "diff", patch: "diff",
+      };
+      return map[ext] || "";
+    }
+
+    // 显示源码：highlight.js 可用则按语言高亮，加载失败/不支持时降级为纯文本
+    function cvShowCode(content, path) {
+      const text = content || "";
+      if (!text) { cvCodeEl.textContent = "（空文件）"; cvCodeEl.scrollTop = 0; return; }
+      if (window.hljs) {
+        try {
+          const lang = cvLanguageFor(path);
+          const result = (lang && hljs.getLanguage(lang))
+            ? hljs.highlight(text, { language: lang, ignoreIllegals: true })
+            : hljs.highlightAuto(text);
+          cvCodeEl.innerHTML = result.value;
+          cvCodeEl.scrollTop = 0;
+          return;
+        } catch (e) { /* 降级为纯文本 */ }
+      }
+      cvCodeEl.textContent = text;
+      cvCodeEl.scrollTop = 0;
+    }
+
     async function openCodeViewer(id) {
       cvOverlay.classList.add("open");
       if (cvTreeLoaded) return;
@@ -1017,8 +1060,7 @@
         if (!res.ok) { cvCodeEl.textContent = data.message || "读取失败"; return; }
         if (data.tooLarge) { cvCodeEl.textContent = `（文件过大，约 ${Math.round((data.size || 0) / 1024)} KB，未显示）`; return; }
         if (data.binary) { cvCodeEl.textContent = "（二进制文件，无法预览）"; return; }
-        cvCodeEl.textContent = data.content || "（空文件）";
-        cvCodeEl.scrollTop = 0;
+        cvShowCode(data.content, path);
       } catch {
         cvCodeEl.textContent = "网络异常，请稍后再试。";
       }
