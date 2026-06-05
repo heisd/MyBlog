@@ -91,6 +91,7 @@ ClaudeAboutWeb/
 - `/welcome`：项目欢迎页（点击"项目归档/浏览项目"先进入此过渡页，再进入项目列表）
 - `/projects`：项目列表页（瀑布流卡片 + 关键词搜索 + 按关键词自动分类的标签筛选）
 - `/project/:id`：项目详情页
+- `/forum`：论坛页（登录用户发表文章 / 帖子并互相讨论）
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
@@ -98,6 +99,7 @@ ClaudeAboutWeb/
 `Vercel` 通过 [`vercel.json`](C:/Users/86151/Desktop/ClaudeCode/ClaudeAboutWeb/vercel.json) 将这些路由重写到静态页面：
 
 - `/projects` -> `/projects.html`
+- `/forum` -> `/forum.html`
 - `/admin` -> `/admin.html`
 - `/project/:id` -> `/project-detail.html?id=:id`
 
@@ -162,10 +164,13 @@ ClaudeAboutWeb/
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/access/config` | 返回 Turnstile site key（若配置）、内置人机验证的一次性表单令牌、申请用的联系邮箱 |
-| `POST` | `/api/access/register` | 注册：邮箱须**已被管理员审批放行**（存在空密码占位账号），人机验证 + 限流后设置密码并发放访问令牌；未放行返回 403 并提示发邮件申请 |
+| `POST` | `/api/access/register` | 注册：邮箱须**已被管理员审批放行**（存在空密码占位账号），人机验证 + 限流后设置**用户名 + 密码**并发放访问令牌；未放行返回 403 并提示发邮件申请 |
 | `POST` | `/api/access/login` | 邮箱 + 密码登录，发放访问令牌 |
-| `GET` | `/api/access/verify` | 校验访问令牌是否有效（`X-Access-Token`） |
+| `GET` | `/api/access/verify` | 校验访问令牌是否有效（`X-Access-Token`），返回邮箱、用户名与会员状态 |
+| `POST` | `/api/access/username` | 给登录后但尚未设置用户名的老账号补设用户名（一次性、唯一） |
 | `POST` | `/api/admin/visitors` | 后台审批放行一个邮箱（建「待认领」普通账号，仅管理员） |
+
+> **用户名 = 站内唯一身份**：注册时除邮箱、密码外还需设置**用户名**（2~20 位中文 / 字母 / 数字 / 下划线 / 连字符，全站唯一，作为论坛里的公开身份）。管理员手动开通 / 老账号在数据库里没有用户名时，本人登录后可在论坛页或调用 `POST /api/access/username` 补设一次。
 
 访问令牌为 HMAC 签名、含 14 天有效期，存在访客浏览器的 `localStorage`，请求项目时通过 `X-Access-Token` 头携带。密码用 `scrypt` + 随机盐哈希存储在 Supabase `visitors` 表。
 
@@ -210,6 +215,35 @@ ClaudeAboutWeb/
    );
    ```
 2. **邮件能发到任意访客邮箱**：注册验证码要发到访客自己的邮箱。**最简单的方式是用 Brevo**（见上文「在线留言」一节）——验证一个发件邮箱（如你的 QQ 邮箱）即可给任意人发信，无需域名。（若用 Resend 则需验证自有域名，否则只能发到你自己账号邮箱。）
+
+## 论坛（讨论 / 发表文章）
+
+`/forum` 是面向**有账号用户**的交流空间：登录后可**发表文章 / 帖子**，并在帖子下**互相回复讨论**。每个用户以注册时设置的**用户名**作为公开身份（全站唯一）。未登录访问会自动跳转到 `/welcome`；管理员令牌同样放行（以站长身份参与）。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/forum/posts` | 帖子列表（倒序、含每帖回复数）；需登录 |
+| `GET` | `/api/forum/posts/:id` | 帖子详情 + 全部回复；需登录 |
+| `POST` | `/api/forum/posts` | 发表新帖（`{title, content}`）；需登录且已设置用户名 |
+| `POST` | `/api/forum/posts/:id/replies` | 回复某帖（`{content}`）；需登录且已设置用户名 |
+| `DELETE` | `/api/forum/posts/:id` | 删除帖子（作者本人或管理员；回复随之级联删除） |
+| `DELETE` | `/api/forum/replies/:id` | 删除回复（作者本人或管理员） |
+
+- 正文与回复均按**纯文本**渲染（保留换行），前后端都做转义，避免 XSS。
+- 发帖 / 回复按**每账号每小时**限流（默认发帖 30、回复 120）。
+- 帖子作者以 `author_username` **冗余保存**，即使账号被删，历史内容仍保留署名。
+
+### 前置条件 ⚠️
+
+执行 [`data/migration-add-forum.sql`](data/migration-add-forum.sql)：给 `visitors` 加唯一 `username` 列，并新建 `forum_posts`、`forum_replies` 两张表。**未执行前**：注册接口会返回「请先执行 visitors.username 迁移」，论坛列表会提示需要初始化。
+
+```sql
+alter table visitors add column if not exists username text;
+create unique index if not exists visitors_username_lower_idx on visitors (lower(username));
+-- forum_posts / forum_replies 见迁移文件
+```
 
 ## CORS 跨域配置
 
