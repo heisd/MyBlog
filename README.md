@@ -244,6 +244,7 @@ ClaudeAboutWeb/
 
 - **写作即选择发布去向**：`保存到我的空间（草稿）` 仅自己可见；`发布到论坛` 则公开在 `/forum`。
 - 「我的文章」列表可**编辑、删除、在草稿 ↔ 已发布之间一键切换**。
+- **个人资料**：可设置**头像**（浏览器内压缩为 96px 方图存储）与**自我介绍**；头像 / 简介会显示在论坛的帖子与回复处。接口：`GET/POST /api/access/profile`。
 - 接口：`GET /api/forum/mine`（列出自己的全部文章，含草稿）、`GET /api/forum/mine/:id`（取回可编辑原文）。
 - 实现：帖子用 `status` 字段区分（`draft` / `published`）；论坛公开列表只查 `published`，草稿详情对非作者一律按「不存在」处理。
 
@@ -256,6 +257,13 @@ alter table visitors add column if not exists username text;
 create unique index if not exists visitors_username_lower_idx on visitors (lower(username));
 alter table forum_posts add column if not exists status text not null default 'published';
 -- forum_posts / forum_replies / forum_post_likes 及索引见迁移文件
+```
+
+个人资料（头像 / 自我介绍）另需执行 [`data/migration-add-profile.sql`](data/migration-add-profile.sql)：
+
+```sql
+alter table visitors add column if not exists avatar_url text;
+alter table visitors add column if not exists bio text;
 ```
 
 ## CORS 跨域配置

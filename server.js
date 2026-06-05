@@ -833,6 +833,34 @@ async function getUsername(email) {
   }
 }
 
+// 头像：允许清空、图片 data URL（客户端已压缩为小尺寸方图）或 https 链接，限长约 220KB。
+function isValidAvatar(value) {
+  if (!value) return true;
+  const s = String(value);
+  if (s.length > 300000) return false;
+  return /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/.test(s) || /^https:\/\/[^\s]+$/i.test(s);
+}
+
+// 批量取作者资料（用户名 → { avatar, bio }），供论坛展示头像；列/表缺失时静默降级为空。
+async function fetchAuthorProfiles(emails) {
+  const uniq = Array.from(new Set((emails || []).filter(Boolean)));
+  if (!uniq.length) return {};
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .select("username, avatar_url, bio")
+      .in("email", uniq);
+    if (error) return {};
+    const map = {};
+    for (const v of data || []) {
+      if (v.username) map[v.username] = { avatar: v.avatar_url || null, bio: v.bio || null };
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 // 论坛表尚未创建时的容错（未执行 forum 迁移）。
 // 42P01 = undefined_table；PGRST205 = 表不在 PostgREST schema cache。
 function isMissingForumTable(error) {
@@ -1455,6 +1483,88 @@ app.post("/api/access/username", requireVisitor, async (req, res) => {
   } catch (error) {
     console.error("Set username failed:", error.message);
     return res.status(500).json({ message: "设置用户名失败，请稍后再试。" });
+  }
+});
+
+// 个人资料：读取（含头像 / 自我介绍）。
+app.get("/api/access/profile", requireVisitor, async (req, res) => {
+  if (!req.visitor) {
+    return res.json({ email: null, username: ADMIN_USERNAME, avatar: null, bio: null, isAdmin: true });
+  }
+  try {
+    let { data, error } = await supabase
+      .from("visitors")
+      .select("email, username, avatar_url, bio, member_until")
+      .eq("email", req.visitor.email)
+      .maybeSingle();
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("visitors")
+        .select("email, username, member_until")
+        .eq("email", req.visitor.email)
+        .maybeSingle());
+    }
+    if (error) throw error;
+    const memberUntil = data && data.member_until ? data.member_until : null;
+    return res.json({
+      email: data ? data.email : req.visitor.email,
+      username: data ? data.username || null : null,
+      avatar: data ? data.avatar_url || null : null,
+      bio: data ? data.bio || null : null,
+      member: memberUntil ? new Date(memberUntil).getTime() > Date.now() : false,
+      memberUntil,
+    });
+  } catch (error) {
+    console.error("Get profile failed:", error.message);
+    return res.status(500).json({ message: "加载资料失败，请稍后再试。" });
+  }
+});
+
+// 个人资料：更新头像 / 自我介绍（仅访客本人）。
+app.post("/api/access/profile", requireVisitor, async (req, res) => {
+  if (!req.visitor) {
+    return res.status(403).json({ message: "管理员资料无需在此设置。" });
+  }
+  if (!hitWindow(forumWriteByEmail, `profile:${req.visitor.email}`, FORUM_WINDOW_MS, 40)) {
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
+  }
+
+  const body = req.body || {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, "avatar")) {
+    const avatar = body.avatar ? String(body.avatar) : null;
+    if (avatar && !isValidAvatar(avatar)) {
+      return res.status(400).json({ message: "头像格式不支持或过大，请换一张图片（会自动压缩为小尺寸）。" });
+    }
+    patch.avatar_url = avatar;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "bio")) {
+    const bio = String(body.bio || "").trim();
+    if (bio.length > 500) return res.status(400).json({ message: "自我介绍不超过 500 字。" });
+    patch.bio = bio || null;
+  }
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ message: "没有要更新的内容。" });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("visitors")
+      .update(patch)
+      .eq("email", req.visitor.email)
+      .select("email, username, avatar_url, bio")
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumn(error)) {
+        return res.status(409).json({ message: "请先在 Supabase 执行 visitors 头像 / 简介迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ message: "账号不存在。" });
+    return res.json({ email: data.email, username: data.username || null, avatar: data.avatar_url || null, bio: data.bio || null });
+  } catch (error) {
+    console.error("Update profile failed:", error.message);
+    return res.status(500).json({ message: "保存资料失败，请稍后再试。" });
   }
 });
 
@@ -2322,7 +2432,9 @@ app.get("/api/forum/posts", requireVisitor, async (req, res) => {
     }
 
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    const authors = await fetchAuthorProfiles(posts.map((p) => p.author_email));
     return res.json({
+      authors,
       posts: posts.map((p) => ({
         id: p.id,
         authorUsername: p.author_username,
@@ -2380,7 +2492,9 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
     const liked = Boolean(me && likeRows.some((l) => l.user_key === me.key));
 
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
+    const authors = await fetchAuthorProfiles([post.author_email, ...(replies || []).map((r) => r.author_email)]);
     return res.json({
+      authors,
       post: {
         id: post.id,
         authorUsername: post.author_username,

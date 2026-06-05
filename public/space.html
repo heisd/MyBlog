@@ -87,6 +87,19 @@
     .md-body hr { border: none; border-top: 1px solid var(--line); margin: 1.2em 0; }
     .md-empty { color: var(--muted); }
 
+    /* 头像 + 个人资料 */
+    .avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: #f0ddc8; flex: none; }
+    .avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #fff;
+      background: linear-gradient(135deg, #cc6a2d, #8e4317); font-weight: 800; }
+    .profile-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .profile-head .avatar { width: 64px; height: 64px; font-size: 1.5rem; }
+    .profile-head .pinfo { flex: 1 1 220px; }
+    .profile-head .pname { font-size: 1.15rem; font-weight: 800; color: var(--accent-dark); }
+    .profile-head .pbio { margin: 4px 0 0; color: var(--muted); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+    .profile-edit { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 16px; }
+    .avatar-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .avatar-row .avatar { width: 72px; height: 72px; font-size: 1.7rem; }
+
     /* 我的文章列表 */
     .post-card { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px;
       box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 14px; }
@@ -156,6 +169,40 @@
     <div class="loading" id="checking">正在确认登录状态…</div>
 
     <div id="space-main" hidden>
+
+    <!-- 个人资料：头像 + 自我介绍 -->
+    <section class="panel" id="profile-panel">
+      <div class="profile-head">
+        <span id="profile-avatar"></span>
+        <div class="pinfo">
+          <div class="pname" id="profile-name"></div>
+          <p class="pbio" id="profile-bio"></p>
+        </div>
+        <button type="button" class="button button-secondary" id="edit-profile-btn">编辑资料</button>
+      </div>
+
+      <div class="profile-edit" id="profile-edit" hidden>
+        <div class="avatar-row">
+          <span id="avatar-preview"></span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <label class="button button-secondary" style="cursor:pointer;">上传头像
+              <input type="file" id="avatar-file" accept="image/*" hidden>
+            </label>
+            <button type="button" class="button button-ghost" id="avatar-remove">移除头像</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="bio-input">自我介绍（≤ 500 字）</label>
+          <textarea id="bio-input" maxlength="500" placeholder="介绍一下你自己、你的方向或兴趣…" style="min-height:90px;font-family:inherit;"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="button button-primary" id="save-profile">保存资料</button>
+          <button type="button" class="button button-ghost" id="cancel-profile">取消</button>
+          <span class="msg" id="profile-msg"></span>
+        </div>
+      </div>
+    </section>
+
     <div class="toolbar-top">
       <button type="button" class="button button-primary" id="new-btn" hidden>✍ 写新文章</button>
     </div>
@@ -225,6 +272,78 @@
     }
     function setMsg(el, text, type) { el.textContent = text || ""; el.className = "msg" + (type ? " " + type : ""); }
     const USERNAME_RE = /^[一-龥A-Za-z0-9_-]{2,20}$/;
+
+    // ---- 头像 / 个人资料 ----
+    let profile = { avatar: null, bio: "" };
+    let editAvatar = null;
+    function initialChar(name) { const t = String(name || "").trim(); return t ? t[0].toUpperCase() : "?"; }
+    function avatarHtml(name, url) {
+      if (url) return `<img class="avatar" src="${escapeHtml(url)}" alt="${escapeHtml(name || "")}">`;
+      return `<span class="avatar avatar-fallback">${escapeHtml(initialChar(name))}</span>`;
+    }
+    function profileMsg() { return document.getElementById("profile-msg"); }
+    function renderProfile() {
+      document.getElementById("profile-avatar").innerHTML = avatarHtml(me && me.username, profile.avatar);
+      document.getElementById("profile-name").textContent = (me && (me.username || me.email)) || "我";
+      document.getElementById("profile-bio").textContent = profile.bio || "还没有自我介绍。点「编辑资料」写一句吧。";
+    }
+    function setAvatarPreview(url) {
+      document.getElementById("avatar-preview").innerHTML = avatarHtml(me && me.username, url);
+    }
+    async function loadProfile() {
+      try {
+        const r = await api("/api/access/profile", { headers: accessHeaders() });
+        if (r.ok && r.data) {
+          profile.avatar = r.data.avatar || null;
+          profile.bio = r.data.bio || "";
+          if (r.data.username && me && !me.username) me.username = r.data.username;
+        }
+      } catch {}
+      renderProfile();
+    }
+    function openProfileEdit() {
+      editAvatar = profile.avatar;
+      setAvatarPreview(editAvatar);
+      document.getElementById("bio-input").value = profile.bio || "";
+      setMsg(profileMsg(), "");
+      document.getElementById("profile-edit").hidden = false;
+    }
+    function closeProfileEdit() { document.getElementById("profile-edit").hidden = true; }
+    // 选图后在浏览器内压缩为 96px 方形头像（data URL），避免大图入库。
+    function handleAvatarFile(file) {
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { setMsg(profileMsg(), "请选择图片文件。", "error"); return; }
+      const reader = new FileReader();
+      reader.onload = function () {
+        const img = new Image();
+        img.onload = function () {
+          const size = 96, canvas = document.createElement("canvas");
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          const s = Math.min(img.width, img.height), sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+          ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+          let url = canvas.toDataURL("image/jpeg", 0.85);
+          if (url.length > 200000) url = canvas.toDataURL("image/jpeg", 0.6);
+          editAvatar = url; setAvatarPreview(url); setMsg(profileMsg(), "");
+        };
+        img.onerror = function () { setMsg(profileMsg(), "图片读取失败，请换一张。", "error"); };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+    async function saveProfile() {
+      const bio = document.getElementById("bio-input").value.trim();
+      const btn = document.getElementById("save-profile");
+      btn.disabled = true; setMsg(profileMsg(), "正在保存…");
+      try {
+        const r = await api("/api/access/profile", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ avatar: editAvatar, bio }) });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) { setMsg(profileMsg(), (r.data && r.data.message) || "保存失败。", "error"); btn.disabled = false; return; }
+        profile.avatar = r.data.avatar || null; profile.bio = r.data.bio || "";
+        setMsg(profileMsg(), "已保存 ✓", "success"); btn.disabled = false;
+        renderProfile(); closeProfileEdit();
+      } catch { setMsg(profileMsg(), "网络异常，请稍后再试。", "error"); btn.disabled = false; }
+    }
 
     // 安全 Markdown 渲染：先整体转义，再仅引入受控标签；链接限定 http(s)。
     function mdToSafeHtml(src) {
@@ -435,6 +554,11 @@
 
     // ---- 事件 ----
     document.getElementById("set-username-btn").addEventListener("click", submitUsername);
+    document.getElementById("edit-profile-btn").addEventListener("click", openProfileEdit);
+    document.getElementById("cancel-profile").addEventListener("click", closeProfileEdit);
+    document.getElementById("save-profile").addEventListener("click", saveProfile);
+    document.getElementById("avatar-remove").addEventListener("click", () => { editAvatar = null; setAvatarPreview(null); });
+    document.getElementById("avatar-file").addEventListener("change", (e) => { handleAvatarFile(e.target.files && e.target.files[0]); e.target.value = ""; });
     document.getElementById("new-btn").addEventListener("click", () => openEditor("new", null));
     document.getElementById("cancel-edit").addEventListener("click", closeEditor);
     document.getElementById("save-draft").addEventListener("click", () => savePost("draft"));
@@ -464,6 +588,7 @@
       document.getElementById("space-main").hidden = false;
       renderMe();
       showUsernameGate(!me.username);
+      await loadProfile();
       await loadMine();
     })();
   </script>

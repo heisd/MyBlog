@@ -129,6 +129,11 @@
     .md-body pre code { background: none; padding: 0; color: inherit; }
     .md-body a { color: var(--accent-dark); font-weight: 700; }
     .md-body hr { border: none; border-top: 1px solid var(--line); margin: 1.2em 0; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: #f0ddc8; flex: none; vertical-align: middle; }
+    .avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg,#cc6a2d,#8e4317); font-weight: 800; font-size: 0.85rem; }
+    .author-chip { display: inline-flex; align-items: center; gap: 7px; }
+    .detail-head .avatar, .author-lg .avatar { width: 44px; height: 44px; font-size: 1.1rem; }
+    .author-bio { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
     .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
     .detail-head h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin: 0 0 8px; }
     .replies-title { margin: 8px 0 16px; font-size: 1.1rem; color: var(--accent-dark); }
@@ -263,6 +268,7 @@
 
     let me = null;          // { email, username, isAdmin }
     let currentPostId = null;
+    let authorsMap = {};    // username -> { avatar, bio }
 
     // 安全 Markdown 渲染：先整体转义，再仅引入受控标签；链接限定 http(s)。
     function mdToSafeHtml(src) {
@@ -317,6 +323,13 @@
     function setMsg(el, text, type = "") {
       el.textContent = text || "";
       el.className = "msg" + (type ? " " + type : "");
+    }
+    function initialChar(name) { const t = String(name || "").trim(); return t ? t[0].toUpperCase() : "?"; }
+    function avatarHtml(username) {
+      const info = authorsMap[username];
+      const url = info && info.avatar;
+      if (url) return `<img class="avatar" src="${escapeHtml(url)}" alt="${escapeHtml(username || "")}">`;
+      return `<span class="avatar avatar-fallback">${escapeHtml(initialChar(username))}</span>`;
     }
     const USERNAME_RE = /^[一-龥A-Za-z0-9_-]{2,20}$/;
 
@@ -459,7 +472,7 @@
         <article class="post-card" data-id="${escapeHtml(p.id)}" style="--i:${i}">
           <h3>${escapeHtml(p.title)}</h3>
           <div class="post-meta">
-            <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
+            <span class="author-chip">${avatarHtml(p.authorUsername)}<span class="author">${escapeHtml(p.authorUsername || "匿名")}</span></span>
             <span>${escapeHtml(fmtDate(p.createdAt))}</span>
             <span class="badge">💬 ${p.replyCount || 0}</span>
             ${likeBtnHtml(p)}
@@ -481,6 +494,7 @@
           wrap.innerHTML = `<div class="error">论坛功能尚未初始化。请先在 Supabase 执行 <b>data/migration-add-forum.sql</b> 后刷新本页。</div>`;
           return;
         }
+        authorsMap = (res.data && res.data.authors) || {};
         const posts = (res.data && res.data.posts) || [];
         if (!posts.length) { wrap.innerHTML = `<div class="empty">还没有帖子，来发表第一篇吧。</div>`; return; }
         wrap.innerHTML = posts.map((p, i) => postCardHtml(p, i)).join("");
@@ -523,24 +537,28 @@
     // ---- 帖子详情 + 回复 ----
     function detailPostHtml(p) {
       return `
-        <div class="detail-head">
-          <div>
-            <h2>${escapeHtml(p.title)}</h2>
-            <div class="post-meta">
-              <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
-              <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+        <div class="detail-head author-lg">
+          <div class="author-chip" style="align-items:flex-start;">
+            ${avatarHtml(p.authorUsername)}
+            <div>
+              <h2 style="margin:0 0 4px;">${escapeHtml(p.title)}</h2>
+              <div class="post-meta" style="margin:0;">
+                <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
+                <span>${escapeHtml(fmtDate(p.createdAt))}</span>
+              </div>
+              ${(authorsMap[p.authorUsername] && authorsMap[p.authorUsername].bio) ? `<p class="author-bio">${escapeHtml(authorsMap[p.authorUsername].bio)}</p>` : ""}
             </div>
           </div>
           ${p.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-post="${escapeHtml(p.id)}">删除帖子</button>` : ""}
         </div>
-        <div class="md-body">${mdToSafeHtml(p.content)}</div>
+        <div class="md-body" style="margin-top:14px;">${mdToSafeHtml(p.content)}</div>
         <div class="post-meta" style="margin-top:18px;margin-bottom:0;">${likeBtnHtml(p)}</div>`;
     }
     function replyHtml(r) {
       return `
         <div class="reply" data-reply="${escapeHtml(r.id)}">
           <div class="reply-meta">
-            <span class="author">${escapeHtml(r.authorUsername || "匿名")}</span>
+            <span class="author-chip">${avatarHtml(r.authorUsername)}<span class="author">${escapeHtml(r.authorUsername || "匿名")}</span></span>
             <span>${escapeHtml(fmtDate(r.createdAt))}</span>
             ${r.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-reply="${escapeHtml(r.id)}" style="padding:2px 8px;">删除</button>` : ""}
           </div>
@@ -560,6 +578,7 @@
         if (res.status === 401) { window.location.href = "/welcome"; return; }
         if (res.status === 404) { postEl.innerHTML = `<div class="error">帖子不存在或已被删除。</div>`; return; }
         if (!res.ok) throw new Error((res.data && res.data.message) || "加载失败。");
+        authorsMap = res.data.authors || {};
         postEl.innerHTML = detailPostHtml(res.data.post);
         const replies = res.data.replies || [];
         document.getElementById("replies-title").textContent = `讨论（${replies.length}）`;
