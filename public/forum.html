@@ -192,6 +192,20 @@
       </div>
     </section>
 
+    <!-- 未登录：登录门禁（进入论坛需先登录） -->
+    <section class="panel" id="auth-gate" hidden>
+      <h2>请先登录账号</h2>
+      <p class="msg">进入论坛需要先登录。登录后即可浏览帖子、发表文章并参与讨论。</p>
+      <div class="form-actions">
+        <a class="button button-primary" href="/welcome">去登录 / 注册 →</a>
+        <a class="button button-secondary" href="/">返回首页</a>
+      </div>
+    </section>
+
+    <!-- 确认登录状态前的占位 -->
+    <div class="loading" id="checking">正在确认登录状态…</div>
+
+    <div id="forum-main" hidden>
     <!-- 列表视图 -->
     <section id="list-view">
       <div class="toolbar">
@@ -239,6 +253,7 @@
         </div>
       </section>
     </section>
+    </div><!-- /#forum-main -->
   </main>
 
   <script>
@@ -634,7 +649,13 @@
     // ---- 初始化 ----
     (async function init() {
       const ok = await loadSession();
-      if (!ok) { window.location.href = "/welcome"; return; }
+      document.getElementById("checking").hidden = true;
+      if (!ok) {
+        // 未登录：只显示登录门禁，不渲染论坛内容。
+        document.getElementById("auth-gate").hidden = false;
+        return;
+      }
+      document.getElementById("forum-main").hidden = false;
       renderMe();
       // 已登录但还没用户名 → 先引导设置；否则可发帖。
       showUsernameGate(!me.username);
@@ -642,5 +663,6 @@
     })();
   </script>
   <script src="/assistant.js" defer></script>
+  <script src="/nav-auth.js" defer></script>
 </body>
 </html>
