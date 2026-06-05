@@ -249,7 +249,7 @@ ClaudeAboutWeb/
 - 「我的文章」列表可**编辑、删除、在草稿 ↔ 已发布之间一键切换**。
 - **个人资料**：可设置**头像**（浏览器内压缩为 96px 方图存储）与**自我介绍**；头像 / 简介会显示在论坛的帖子与回复处。接口：`GET/POST /api/access/profile`。
 - **公开主页 + 关注**：论坛里点作者名片进入 `/u/:username`（头像 / 简介 / 文章 / 获赞 / 讨论 / 粉丝 / 关注），可**关注 / 取消关注**；个人空间「关注动态」展示所关注作者的最新文章。接口：`GET /api/users/:username`、`POST /api/users/:username/follow`、`GET /api/feed`。关注关系表见 [`data/migration-add-follows.sql`](data/migration-add-follows.sql)。
-- **私信（`/messages`）**：与站内用户一对一收发消息。用户主页「✉ 私信」可发起会话；导航栏带**未读小红点**。接口：`POST /api/messages`、`GET /api/messages`（会话列表）、`GET /api/messages/:username`（会话内容，自动标记已读）、`GET /api/messages/unread-count`。消息表见 [`data/migration-add-messages.sql`](data/migration-add-messages.sql)。仅普通账号可用（管理员无私信）。
+- **私信（`/messages`）**：与站内用户一对一收发消息。**需互相关注**才能发送（用户主页仅互关时显示「✉ 私信」）；会话**每 5 秒实时刷新**、列表每 12 秒刷新；消息可**撤回**（发件人，双方移除）或**删除**（仅从自己一侧隐藏，两侧都删则彻底移除）；导航栏带**未读小红点**。接口：`POST /api/messages`（发送，校验互关）、`GET /api/messages`（会话列表）、`GET /api/messages/:username`（会话内容，自动已读，返回 `canMessage`）、`GET /api/messages/unread-count`、`DELETE /api/messages/:id`（`{scope:"recall"|"me"}`）。消息表见 [`data/migration-add-messages.sql`](data/migration-add-messages.sql)。仅普通账号可用（管理员无私信）。
 - 接口：`GET /api/forum/mine`（列出自己的全部文章，含草稿）、`GET /api/forum/mine/:id`（取回可编辑原文）。
 - 实现：帖子用 `status` 字段区分（`draft` / `published`）；论坛公开列表只查 `published`，草稿详情对非作者一律按「不存在」处理。
 

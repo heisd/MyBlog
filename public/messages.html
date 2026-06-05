@@ -61,6 +61,10 @@
     .bubble.them { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
     .bubble.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
     .bubble .bt { display: block; font-size: 0.7rem; opacity: 0.7; margin-top: 4px; }
+    .bubble .bact { cursor: pointer; margin-left: 8px; }
+    .bubble .bact:hover { text-decoration: underline; }
+    .dm-notice { padding: 14px 16px; border-top: 1px solid var(--line); background: var(--card); color: var(--muted); text-align: center; font-size: 0.9rem; line-height: 1.6; }
+    .dm-notice a { color: var(--accent-dark); font-weight: 700; text-decoration: none; }
     .thread-foot { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--card); }
     .thread-foot textarea { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffefb; font: inherit; resize: none; min-height: 44px; max-height: 140px; }
     .thread-foot textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
@@ -186,30 +190,55 @@
     }
 
     // ---- 会话内容 ----
+    let currentCanMessage = false;
+    let threadTimer = null;
     function bubbleHtml(m) {
-      return `<div class="bubble ${m.mine ? "me" : "them"}">${escapeHtml(m.content)}<span class="bt">${escapeHtml(fmtTime(m.createdAt))}</span></div>`;
+      const acts = m.mine
+        ? `<span class="bact" data-act="recall" data-id="${escapeHtml(m.id)}">撤回</span><span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`
+        : `<span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`;
+      return `<div class="bubble ${m.mine ? "me" : "them"}" data-mid="${escapeHtml(m.id)}">${escapeHtml(m.content)}<span class="bt">${escapeHtml(fmtTime(m.createdAt))} · ${acts}</span></div>`;
     }
-    function renderThread(peer, messages) {
+    function onBubbleAction(e) {
+      const a = e.target.closest(".bact");
+      if (a) msgAction(a.getAttribute("data-id"), a.getAttribute("data-act"));
+    }
+    async function msgAction(id, scope) {
+      if (scope === "recall" && !confirm("撤回这条消息？双方都将不再看到。")) return;
+      if (scope === "me" && !confirm("从你这一侧删除这条消息？")) return;
+      try {
+        const r = await api("/api/messages/" + encodeURIComponent(id), { method: "DELETE", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ scope }) }, { retries: 1 });
+        if (!r.ok) { alert((r.data && r.data.message) || "操作失败。"); return; }
+        const sel = window.CSS && CSS.escape ? CSS.escape(id) : id;
+        const el = document.querySelector('.bubble[data-mid="' + sel + '"]');
+        if (el) el.remove();
+        loadConversations();
+      } catch { alert("网络异常，请稍后再试。"); }
+    }
+    function renderThread(peer, messages, canMessage) {
       const t = document.getElementById("thread");
+      const foot = canMessage
+        ? `<div class="thread-foot">
+             <textarea id="dm-input" placeholder="输入私信内容，Enter 发送，Shift+Enter 换行…"></textarea>
+             <button type="button" class="button button-primary" id="dm-send">发送</button>
+           </div>`
+        : `<div class="dm-notice">需要与 <b>${escapeHtml(peer.username)}</b> 互相关注后才能发私信。去 <a href="/u/${encodeURIComponent(peer.username)}">TA 的主页</a> 关注一下吧。</div>`;
       t.innerHTML = `
         <div class="thread-head">
           <a href="/u/${encodeURIComponent(peer.username)}" title="查看主页">${avatarImg(peer.avatar, "avatar-sm")}<span>${escapeHtml(peer.username)}</span></a>
         </div>
         <div class="thread-body" id="thread-body">
-          ${messages.length ? messages.map(bubbleHtml).join("") : `<div class="empty">还没有消息，发送第一条吧。</div>`}
+          ${messages.length ? messages.map(bubbleHtml).join("") : `<div class="empty">还没有消息${canMessage ? "，发送第一条吧。" : "。"}</div>`}
         </div>
-        <div class="thread-foot">
-          <textarea id="dm-input" placeholder="输入私信内容，Enter 发送，Shift+Enter 换行…"></textarea>
-          <button type="button" class="button button-primary" id="dm-send">发送</button>
-        </div>`;
+        ${foot}`;
       const body = document.getElementById("thread-body");
       body.scrollTop = body.scrollHeight;
-      const input = document.getElementById("dm-input");
-      input.focus();
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-      });
-      document.getElementById("dm-send").addEventListener("click", sendMessage);
+      body.addEventListener("click", onBubbleAction);
+      if (canMessage) {
+        const input = document.getElementById("dm-input");
+        input.focus();
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+        document.getElementById("dm-send").addEventListener("click", sendMessage);
+      }
     }
     async function openThread(username) {
       currentPeer = username;
@@ -221,9 +250,10 @@
         if (r.status === 401) { window.location.href = "/welcome"; return; }
         if (r.status === 404) { t.innerHTML = `<div class="placeholder">用户「${escapeHtml(username)}」不存在。</div>`; return; }
         if (!r.ok) throw new Error((r.data && r.data.message) || "加载失败。");
-        renderThread(r.data.peer, r.data.messages || []);
-        // 进入会话后未读已清，刷新左侧列表的小红点。
-        loadConversations();
+        currentCanMessage = !!r.data.canMessage;
+        renderThread(r.data.peer, r.data.messages || [], currentCanMessage);
+        loadConversations(); // 进入会话后未读已清，刷新左侧
+        startThreadPolling();
       } catch (e) { t.innerHTML = `<div class="placeholder error">${escapeHtml(e.message)}</div>`; }
     }
     async function sendMessage() {
@@ -246,6 +276,37 @@
         input.focus();
         loadConversations();
       } catch { alert("网络异常，请稍后再试。"); btn.disabled = false; }
+    }
+
+    // ---- 实时刷新（轮询）----
+    function startThreadPolling() {
+      clearInterval(threadTimer);
+      threadTimer = setInterval(pollThread, 5000);
+    }
+    async function pollThread() {
+      if (!currentPeer || document.hidden) return;
+      let r;
+      try { r = await api("/api/messages/" + encodeURIComponent(currentPeer), { headers: accessHeaders() }, { retries: 0 }); } catch { return; }
+      if (!r || !r.ok || !r.data) return;
+      reconcileMessages(r.data.messages || []);
+    }
+    function reconcileMessages(messages) {
+      const body = document.getElementById("thread-body");
+      if (!body) return;
+      const ids = new Set(messages.map((m) => String(m.id)));
+      // 移除被撤回/删除的
+      body.querySelectorAll(".bubble[data-mid]").forEach((el) => { if (!ids.has(el.getAttribute("data-mid"))) el.remove(); });
+      const have = new Set(Array.from(body.querySelectorAll(".bubble[data-mid]")).map((el) => el.getAttribute("data-mid")));
+      const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 90;
+      let appended = false;
+      messages.forEach((m) => {
+        if (!have.has(String(m.id))) {
+          const empt = body.querySelector(".empty"); if (empt) empt.remove();
+          body.insertAdjacentHTML("beforeend", bubbleHtml(m));
+          appended = true;
+        }
+      });
+      if (appended) { loadConversations(); if (nearBottom) body.scrollTop = body.scrollHeight; }
     }
 
     document.getElementById("conv-list").addEventListener("click", (e) => {
@@ -272,6 +333,8 @@
       await loadConversations();
       const to = new URLSearchParams(location.search).get("to");
       if (to) openThread(to);
+      // 会话列表定时刷新（最近消息 / 未读）
+      setInterval(() => { if (!document.hidden) loadConversations(); }, 12000);
     })();
   </script>
   <script src="/nav-auth.js" defer></script>

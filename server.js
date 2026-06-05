@@ -2786,7 +2786,7 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
     // 关注信息（关注表未迁移时全部按 0 / false 降级）。
     const viewerEmail = req.visitor ? req.visitor.email : null;
     const isSelf = Boolean(viewerEmail && v.email && viewerEmail === v.email);
-    let followers = 0, followingCount = 0, isFollowing = false;
+    let followers = 0, followingCount = 0, isFollowing = false, followsYou = false;
     try {
       const fc = await supabase.from("forum_follows").select("*", { count: "exact", head: true }).eq("following_username", v.username);
       if (!fc.error) followers = fc.count || 0;
@@ -2797,8 +2797,14 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
       if (viewerEmail && !isSelf) {
         const { data: rel } = await supabase.from("forum_follows").select("follower_email").eq("follower_email", viewerEmail).eq("following_username", v.username).maybeSingle();
         isFollowing = !!rel;
+        const viewerUsername = await getUsername(viewerEmail);
+        if (viewerUsername && v.email) {
+          const { data: rel2 } = await supabase.from("forum_follows").select("follower_email").eq("follower_email", v.email).eq("following_username", viewerUsername).maybeSingle();
+          followsYou = !!rel2;
+        }
       }
     } catch {}
+    const isMutual = isFollowing && followsYou;
 
     return res.json({
       user: {
@@ -2812,8 +2818,11 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
         followers,
         following: followingCount,
         isFollowing,
+        followsYou,
+        isMutual,
         isSelf,
         canFollow: Boolean(viewerEmail && !isSelf),
+        canMessage: Boolean(viewerEmail && !isSelf && isMutual),
       },
       posts: posts.map((p) => ({
         id: p.id,
@@ -2949,6 +2958,26 @@ async function getVisitorByUsername(username) {
   return data || null;
 }
 
+// 是否互相关注（私信门禁）：A→B 且 B→A 都存在。follows 表缺失或任一方缺失则视为否。
+async function mutualFollow(emailA, usernameA, emailB, usernameB) {
+  if (!emailA || !emailB || !usernameA || !usernameB) return false;
+  try {
+    const aToB = await supabase.from("forum_follows")
+      .select("follower_email", { count: "exact", head: true })
+      .eq("follower_email", emailA).eq("following_username", usernameB);
+    if (aToB.error) { if (isMissingForumTable(aToB.error)) return false; throw aToB.error; }
+    if (!aToB.count) return false;
+    const bToA = await supabase.from("forum_follows")
+      .select("follower_email", { count: "exact", head: true })
+      .eq("follower_email", emailB).eq("following_username", usernameA);
+    if (bToA.error) { if (isMissingForumTable(bToA.error)) return false; throw bToA.error; }
+    return (bToA.count || 0) > 0;
+  } catch (error) {
+    console.error("mutualFollow failed:", error.message);
+    return false;
+  }
+}
+
 // 发送私信。
 app.post("/api/messages", requireVisitor, async (req, res) => {
   if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再发私信。" });
@@ -2964,6 +2993,12 @@ app.post("/api/messages", requireVisitor, async (req, res) => {
     const peer = await getVisitorByUsername(to);
     if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
     if (peer.email === req.visitor.email) return res.status(400).json({ message: "不能给自己发私信。" });
+    // 私信门禁：需互相关注。
+    const myUsername = await getUsername(req.visitor.email);
+    if (!myUsername) return res.status(403).json({ message: "请先设置用户名。", code: "USERNAME_REQUIRED" });
+    if (!(await mutualFollow(req.visitor.email, myUsername, peer.email, peer.username))) {
+      return res.status(403).json({ message: "需要与对方互相关注后才能发私信。", code: "NOT_MUTUAL" });
+    }
     const { data, error } = await supabase
       .from("forum_messages")
       .insert({ sender_email: req.visitor.email, recipient_email: peer.email, content })
@@ -2985,17 +3020,28 @@ app.get("/api/messages", requireVisitor, async (req, res) => {
   if (!req.visitor) return res.json({ conversations: [] });
   const me = req.visitor.email;
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("forum_messages")
-      .select("sender_email, recipient_email, content, created_at, read_at")
+      .select("sender_email, recipient_email, content, created_at, read_at, deleted_by_sender, deleted_by_recipient")
       .or(`sender_email.eq.${me},recipient_email.eq.${me}`)
       .order("created_at", { ascending: false })
       .limit(500);
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_messages")
+        .select("sender_email, recipient_email, content, created_at, read_at")
+        .or(`sender_email.eq.${me},recipient_email.eq.${me}`)
+        .order("created_at", { ascending: false })
+        .limit(500));
+    }
     if (error) {
       if (isMissingForumTable(error)) return res.json({ conversations: [], needsMigration: true });
       throw error;
     }
-    const rows = data || [];
+    // 过滤掉「我已删除」的消息（不影响对方）。
+    const rows = (data || []).filter((m) =>
+      !((m.sender_email === me && m.deleted_by_sender) || (m.recipient_email === me && m.deleted_by_recipient))
+    );
     const byPeer = new Map();
     for (const m of rows) {
       const peer = m.sender_email === me ? m.recipient_email : m.sender_email;
@@ -3061,15 +3107,28 @@ app.get("/api/messages/:username", requireVisitor, async (req, res) => {
     if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
     if (peer.email === me) return res.status(400).json({ message: "这是你自己。" });
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("forum_messages")
-      .select("id, sender_email, content, created_at")
+      .select("id, sender_email, content, created_at, deleted_by_sender, deleted_by_recipient")
       .in("sender_email", [me, peer.email])
       .in("recipient_email", [me, peer.email])
       .order("created_at", { ascending: true })
       .limit(500);
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_messages")
+        .select("id, sender_email, content, created_at")
+        .in("sender_email", [me, peer.email])
+        .in("recipient_email", [me, peer.email])
+        .order("created_at", { ascending: true })
+        .limit(500));
+    }
     if (error) {
-      if (isMissingForumTable(error)) return res.json({ peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null }, messages: [] });
+      if (isMissingForumTable(error)) {
+        const myU0 = await getUsername(me);
+        const canMsg0 = await mutualFollow(me, myU0, peer.email, peer.username);
+        return res.json({ peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null }, messages: [], canMessage: canMsg0 });
+      }
       throw error;
     }
 
@@ -3078,13 +3137,79 @@ app.get("/api/messages/:username", requireVisitor, async (req, res) => {
       .eq("recipient_email", me).eq("sender_email", peer.email).is("read_at", null)
       .then(() => {}, () => {});
 
+    // 过滤掉「我已删除」的消息（仅影响我这一侧）。
+    const visible = (data || []).filter((m) =>
+      !((m.sender_email === me && m.deleted_by_sender) || (m.sender_email !== me && m.deleted_by_recipient))
+    );
+    const myU = await getUsername(me);
+    const canMessage = await mutualFollow(me, myU, peer.email, peer.username);
+
     return res.json({
       peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null },
-      messages: (data || []).map((m) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_email === me })),
+      canMessage,
+      messages: visible.map((m) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_email === me })),
     });
   } catch (error) {
     console.error("Read conversation failed:", error.message);
     return res.status(500).json({ message: "加载会话失败，请稍后再试。" });
+  }
+});
+
+// 撤回（发件人，双方移除）/ 删除（仅从自己一侧隐藏；两侧都删则彻底移除）。
+app.delete("/api/messages/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录。" });
+  const me = req.visitor.email;
+  const scope = String(req.body?.scope || "me");
+  try {
+    let { data: m, error } = await supabase
+      .from("forum_messages")
+      .select("id, sender_email, recipient_email, deleted_by_sender, deleted_by_recipient")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error && isMissingColumn(error)) {
+      ({ data: m, error } = await supabase
+        .from("forum_messages")
+        .select("id, sender_email, recipient_email")
+        .eq("id", req.params.id)
+        .maybeSingle());
+    }
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "消息不存在。" });
+      throw error;
+    }
+    if (!m) return res.status(404).json({ message: "消息不存在。" });
+
+    const isSender = m.sender_email === me;
+    const isRecipient = m.recipient_email === me;
+    if (!isSender && !isRecipient) return res.status(403).json({ message: "无权操作这条消息。" });
+
+    if (scope === "recall") {
+      if (!isSender) return res.status(403).json({ message: "只能撤回自己发送的消息。" });
+      const { error: dErr } = await supabase.from("forum_messages").delete().eq("id", m.id);
+      if (dErr) throw dErr;
+      return res.json({ deleted: true, recalled: true });
+    }
+
+    // scope = "me"：仅从自己一侧隐藏；若两侧都已隐藏则彻底删除。
+    const patch = {};
+    if (isSender) patch.deleted_by_sender = true;
+    if (isRecipient) patch.deleted_by_recipient = true;
+    const bothHidden =
+      (m.deleted_by_sender || patch.deleted_by_sender) && (m.deleted_by_recipient || patch.deleted_by_recipient);
+    if (bothHidden) {
+      const { error: dErr } = await supabase.from("forum_messages").delete().eq("id", m.id);
+      if (dErr) throw dErr;
+      return res.json({ deleted: true });
+    }
+    const { error: uErr } = await supabase.from("forum_messages").update(patch).eq("id", m.id);
+    if (uErr) {
+      if (isMissingColumn(uErr)) return res.status(409).json({ message: "请先在 Supabase 执行 messages 撤回/删除 迁移。", code: "MIGRATION_REQUIRED" });
+      throw uErr;
+    }
+    return res.json({ deleted: true });
+  } catch (error) {
+    console.error("Delete message failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
   }
 });
 
