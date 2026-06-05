@@ -284,13 +284,13 @@
     }
     .im-stage {
       position: relative;
-      width: 188px;
+      width: 178px;
       transform-style: preserve-3d;
-      animation: im-float 5.5s ease-in-out infinite;
+      animation: im-fly 4.6s ease-in-out infinite;
       cursor: pointer;
     }
     .im-figure {
-      width: 188px;
+      width: 178px;
       height: auto;
       display: block;
       transform: translateZ(0);
@@ -299,11 +299,34 @@
     .im-eye { animation: im-eye 3.6s ease-in-out infinite; }
     .im-ring { transform-origin: 30px 30px; animation: arc-spin 9s linear infinite; }
     .im-core { transform-origin: 30px 30px; animation: im-core-pulse 2.8s ease-in-out infinite; }
-    @keyframes im-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes im-fly {
+      0%, 100% { transform: translateY(2px) rotate(-1.6deg); }
+      50% { transform: translateY(-14px) rotate(1.6deg); }
+    }
     @keyframes im-eye { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
     @keyframes im-core-pulse {
       0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 2px rgba(150, 230, 255, 0.7)); }
       50% { opacity: 1; filter: drop-shadow(0 0 7px rgba(150, 230, 255, 0.95)); }
+    }
+    /* 飞行推进器喷焰 + 发光点 */
+    .im-jet {
+      transform-box: fill-box;
+      transform-origin: center top;
+      animation: im-jetflick 200ms ease-in-out infinite alternate;
+    }
+    .im-glow {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: im-glowpulse 200ms ease-in-out infinite alternate;
+      filter: drop-shadow(0 0 5px rgba(150, 230, 255, 0.95));
+    }
+    @keyframes im-jetflick {
+      from { transform: scaleY(0.8); opacity: 0.6; }
+      to { transform: scaleY(1.18); opacity: 1; }
+    }
+    @keyframes im-glowpulse {
+      from { opacity: 0.7; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1.05); }
     }
     /* 点击钢铁侠：眼睛闪光 */
     @keyframes im-eye-flash {
@@ -495,6 +518,8 @@
       .im-eye,
       .im-ring,
       .im-core,
+      .im-jet,
+      .im-glow,
       .im-figure.flash .im-eye {
         animation: none;
       }
@@ -537,14 +562,18 @@
           <div class="im-tilt" id="im-tilt">
             <div class="im-stage" id="im-stage" role="button" tabindex="0" aria-label="点击钢铁侠互动">
               <div class="im-quote" id="im-quote" aria-live="polite"></div>
-              <svg class="im-figure" id="im-figure" viewBox="0 0 200 440" role="img" aria-label="钢铁侠 Mark 85 全身模型">
+              <svg class="im-figure" id="im-figure" viewBox="0 0 200 480" role="img" aria-label="钢铁侠 Mark 85 全身飞行模型">
                 <defs>
                   <linearGradient id="imG" x1="0.15" y1="0" x2="0.45" y2="1"><stop offset="0%" stop-color="#ffeebf"/><stop offset="32%" stop-color="#f6c54b"/><stop offset="66%" stop-color="#d49a25"/><stop offset="100%" stop-color="#9a6912"/></linearGradient>
                   <linearGradient id="imR" x1="0.15" y1="0" x2="0.4" y2="1"><stop offset="0%" stop-color="#e8463a"/><stop offset="45%" stop-color="#c11d14"/><stop offset="100%" stop-color="#7a0e07"/></linearGradient>
                   <linearGradient id="imRd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b81a11"/><stop offset="100%" stop-color="#6c0c06"/></linearGradient>
+                  <linearGradient id="imJet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/><stop offset="30%" stop-color="#bfeeff" stop-opacity="0.85"/><stop offset="100%" stop-color="#7fd6ff" stop-opacity="0"/></linearGradient>
                 </defs>
-                <!-- 地面阴影 -->
-                <ellipse cx="100" cy="426" rx="60" ry="9" fill="#000" opacity="0.10"/>
+                <!-- 推进器喷焰（飞行；置于身体之下） -->
+                <g class="im-jet"><path fill="url(#imJet)" d="M74,420 Q84,447 84,477 Q84,447 94,420 Z"/></g>
+                <g class="im-jet"><path fill="url(#imJet)" d="M106,420 Q116,447 116,477 Q116,447 126,420 Z"/></g>
+                <g class="im-jet" style="animation-duration:260ms"><path fill="url(#imJet)" d="M41,268 Q48,289 48,305 Q48,289 55,268 Z"/></g>
+                <g class="im-jet" style="animation-duration:260ms"><path fill="url(#imJet)" d="M145,268 Q152,289 152,305 Q152,289 159,268 Z"/></g>
                 <!-- 颈部 -->
                 <path fill="url(#imRd)" d="M86,74 L114,74 L117,112 L83,112 Z"/>
                 <!-- 大腿（红） -->
@@ -610,11 +639,16 @@
                   <circle cx="30" cy="30" r="13" fill="none" stroke="#bfefff" stroke-width="1.4" opacity="0.6"/>
                   <g class="im-core"><circle cx="30" cy="30" r="8.5" fill="url(#imReac)"/><polygon points="30,25 34,33 26,33" fill="none" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" opacity="0.9"/></g>
                 </svg>
+                <!-- 推进器发光点（脚底 / 手掌） -->
+                <g class="im-glow"><ellipse cx="84" cy="422" rx="11" ry="5" fill="#e9fbff"/></g>
+                <g class="im-glow"><ellipse cx="116" cy="422" rx="11" ry="5" fill="#e9fbff"/></g>
+                <g class="im-glow"><ellipse cx="48" cy="270" rx="7" ry="3.5" fill="#e9fbff"/></g>
+                <g class="im-glow"><ellipse cx="152" cy="270" rx="7" ry="3.5" fill="#e9fbff"/></g>
               </svg>
             </div>
           </div>
           <div class="stark-label">Stark Industries · Mark 85</div>
-          <p class="stark-tagline">点击钢铁侠 ⚡ 眼睛亮起，听他说一句</p>
+          <p class="stark-tagline">推进器点火 · 悬停飞行中 ⚡ 点击与他互动</p>
         </div>
         <h2 class="hero-panel-title">欢迎来到我的博客</h2>
         <ul>
