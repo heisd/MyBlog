@@ -142,6 +142,20 @@
       </div>
     </section>
 
+    <!-- 未登录：登录门禁（进入个人空间需先登录） -->
+    <section class="panel" id="auth-gate" hidden>
+      <h2>请先登录账号</h2>
+      <p class="msg">进入「我的空间」需要先登录。登录后即可写作、保存草稿或发布到论坛。</p>
+      <div class="form-actions">
+        <a class="button button-primary" href="/welcome">去登录 / 注册 →</a>
+        <a class="button button-secondary" href="/">返回首页</a>
+      </div>
+    </section>
+
+    <!-- 确认登录状态前的占位 -->
+    <div class="loading" id="checking">正在确认登录状态…</div>
+
+    <div id="space-main" hidden>
     <div class="toolbar-top">
       <button type="button" class="button button-primary" id="new-btn" hidden>✍ 写新文章</button>
     </div>
@@ -183,6 +197,7 @@
 
     <h2 style="font-size:1.2rem;margin:6px 2px 14px;color:var(--accent-dark);">我的文章</h2>
     <div id="posts"></div>
+    </div><!-- /#space-main -->
   </main>
 
   <script>
@@ -440,7 +455,13 @@
 
     (async function init() {
       const ok = await loadSession();
-      if (!ok) { window.location.href = "/welcome"; return; }
+      document.getElementById("checking").hidden = true;
+      if (!ok) {
+        // 未登录：只显示登录门禁，不渲染任何写作界面。
+        document.getElementById("auth-gate").hidden = false;
+        return;
+      }
+      document.getElementById("space-main").hidden = false;
       renderMe();
       showUsernameGate(!me.username);
       await loadMine();
