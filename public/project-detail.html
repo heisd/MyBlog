@@ -193,15 +193,24 @@
     .cv-side { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: #f8f4ed; }
     .cv-side input { margin: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: #fffefb; }
     .cv-side input:focus { outline: none; border-color: var(--accent); }
-    .cv-files { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
-    .cv-file {
-      display: block; width: 100%; text-align: left; border: none; background: none;
-      padding: 6px 10px; border-radius: 8px; cursor: pointer; font-family: "SFMono-Regular", Consolas, monospace;
-      font-size: .82rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      direction: rtl;
+    .cv-files { flex: 1; overflow-y: auto; padding: 8px; }
+    .cv-row {
+      display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+      border: none; background: none; border-radius: 8px; cursor: pointer; user-select: none;
+      padding: 5px 10px; font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .82rem; color: var(--ink);
     }
-    .cv-file:hover { background: rgba(204,106,45,.08); }
-    .cv-file.active { background: rgba(204,106,45,.16); color: var(--accent-dark); font-weight: 700; }
+    .cv-row:hover { background: rgba(204,106,45,.08); }
+    .cv-twisty { flex: none; width: 12px; text-align: center; font-size: .58rem; color: var(--muted); transition: transform .15s ease; }
+    .cv-dir.open > .cv-twisty { transform: rotate(90deg); }
+    .cv-icon { flex: none; font-size: .9rem; line-height: 1; }
+    .cv-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cv-dir > .cv-name { font-weight: 600; }
+    .cv-file.active { background: rgba(204,106,45,.16); color: var(--accent-dark); }
+    .cv-file.active .cv-name { font-weight: 700; }
+    .cv-children { display: none; }
+    .cv-children.open { display: block; }
+    .cv-empty { color: var(--muted); padding: 12px 14px; font-size: .85rem; }
     .cv-content { display: flex; flex-direction: column; min-height: 0; }
     .cv-path { padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .cv-code { flex: 1; margin: 0; overflow: auto; padding: 16px; background: #2b2722; color: #f4efe7; font-family: "SFMono-Regular", Consolas, monospace; font-size: .86rem; line-height: 1.6; white-space: pre; }
@@ -209,11 +218,11 @@
     @media (max-width: 720px) {
       .cv-main { grid-template-columns: 1fr; grid-template-rows: 38% 62%; }
       .cv-side { border-right: none; border-bottom: 1px solid var(--line); }
-      .cv-file { direction: ltr; }
     }
     @media (prefers-reduced-motion: reduce) {
       .repo-link { transition: none; }
       .repo-link:hover { transform: none; }
+      .cv-twisty { transition: none; }
     }
     .video-panel {
       margin-bottom: 30px;
@@ -870,8 +879,10 @@
 
     // ---- 站内只读源码浏览 ----
     let currentProjectId = null;
-    let cvFiles = [];
+    let cvEntries = [];
+    let cvTreeRoot = null;
     let cvTreeLoaded = false;
+    let cvActivePath = null;
     const cvOverlay = document.getElementById("cv-overlay");
     const cvFilesEl = document.getElementById("cv-files");
     const cvFilterEl = document.getElementById("cv-filter");
@@ -881,12 +892,83 @@
 
     function cvClose() { cvOverlay.classList.remove("open"); }
 
+    // 由扁平的路径列表构建文件树
+    function buildCvTree(entries) {
+      const root = { name: "", path: "", type: "dir", children: {} };
+      entries.forEach((entry) => {
+        const parts = String(entry.path || "").split("/").filter(Boolean);
+        let node = root;
+        parts.forEach((part, i) => {
+          const isLast = i === parts.length - 1;
+          if (!node.children[part]) {
+            node.children[part] = {
+              name: part,
+              path: parts.slice(0, i + 1).join("/"),
+              type: isLast ? entry.type : "dir",
+              children: {},
+            };
+          }
+          node = node.children[part];
+        });
+      });
+      return root;
+    }
+
+    // 文件夹在前、文件在后，各自按名称排序
+    function cvSortedChildren(node) {
+      return Object.values(node.children).sort((a, b) => {
+        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+        return a.name.localeCompare(b.name, "zh");
+      });
+    }
+
+    // 筛选时需要显示的节点路径集合（命中的文件 + 其所有上级目录）
+    function cvMatchSet(filter) {
+      const f = filter.toLowerCase();
+      const set = new Set();
+      cvEntries.forEach((entry) => {
+        if (entry.type !== "file" || !entry.path.toLowerCase().includes(f)) return;
+        let acc = "";
+        entry.path.split("/").forEach((part) => {
+          acc = acc ? `${acc}/${part}` : part;
+          set.add(acc);
+        });
+      });
+      return set;
+    }
+
+    function cvRenderNode(node, depth, opts) {
+      let html = "";
+      cvSortedChildren(node).forEach((child) => {
+        if (opts.matchSet && !opts.matchSet.has(child.path)) return;
+        const pad = depth * 14 + 10;
+        const safePath = escapeHtml(child.path);
+        const safeName = escapeHtml(child.name);
+        if (child.type === "dir") {
+          const open = opts.forceOpen || depth === 0;
+          html += `<div class="cv-row cv-dir${open ? " open" : ""}" data-path="${safePath}" style="padding-left:${pad}px">`
+            + `<span class="cv-twisty">▶</span><span class="cv-icon">📁</span><span class="cv-name">${safeName}</span></div>`;
+          html += `<div class="cv-children${open ? " open" : ""}">${cvRenderNode(child, depth + 1, opts)}</div>`;
+        } else {
+          html += `<button type="button" class="cv-row cv-file" data-path="${safePath}" title="${safePath}" style="padding-left:${pad}px">`
+            + `<span class="cv-twisty"></span><span class="cv-icon">📄</span><span class="cv-name">${safeName}</span></button>`;
+        }
+      });
+      return html;
+    }
+
     function renderCvFileList(filter) {
-      const f = (filter || "").toLowerCase();
-      const list = cvFiles.filter((p) => !f || p.toLowerCase().includes(f)).slice(0, 2000);
-      cvFilesEl.innerHTML = list.length
-        ? list.map((p) => `<button type="button" class="cv-file" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")
-        : "<div class='cv-loading'>无匹配文件</div>";
+      if (!cvTreeRoot) return;
+      const f = (filter || "").trim();
+      const html = f
+        ? cvRenderNode(cvTreeRoot, 0, { matchSet: cvMatchSet(f.toLowerCase()), forceOpen: true })
+        : cvRenderNode(cvTreeRoot, 0, { matchSet: null, forceOpen: false });
+      cvFilesEl.innerHTML = html || "<div class='cv-empty'>无匹配文件</div>";
+      if (cvActivePath) {
+        cvFilesEl.querySelectorAll(".cv-file").forEach((b) => {
+          if (b.dataset.path === cvActivePath) b.classList.add("active");
+        });
+      }
     }
 
     async function openCodeViewer(id) {
@@ -899,7 +981,8 @@
         if (res.status === 401) { window.location.href = "/welcome"; return; }
         if (!res.ok) { cvFilesEl.innerHTML = `<div class='cv-loading'>${escapeHtml(data.message || "加载失败")}</div>`; return; }
         cvTitleEl.textContent = data.repo || "源码浏览";
-        cvFiles = (data.entries || []).filter((e) => e.type === "file").map((e) => e.path).sort();
+        cvEntries = (data.entries || []).filter((e) => e && e.path);
+        cvTreeRoot = buildCvTree(cvEntries);
         cvTreeLoaded = true;
         renderCvFileList("");
       } catch {
@@ -909,11 +992,19 @@
 
     cvFilterEl.addEventListener("input", () => renderCvFileList(cvFilterEl.value.trim()));
     cvFilesEl.addEventListener("click", async (event) => {
+      const dirRow = event.target.closest(".cv-dir");
+      if (dirRow && cvFilesEl.contains(dirRow)) {
+        dirRow.classList.toggle("open");
+        const kids = dirRow.nextElementSibling;
+        if (kids && kids.classList.contains("cv-children")) kids.classList.toggle("open");
+        return;
+      }
       const btn = event.target.closest(".cv-file");
       if (!btn) return;
       cvFilesEl.querySelectorAll(".cv-file.active").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       const path = btn.dataset.path;
+      cvActivePath = path;
       cvPathEl.textContent = path;
       cvCodeEl.textContent = "加载中…";
       try {
