@@ -2978,6 +2978,17 @@ async function mutualFollow(emailA, usernameA, emailB, usernameB) {
   }
 }
 
+// 私信实时推送（SSE）：email -> 该用户所有打开的连接。
+const sseClients = new Map();
+function sseSend(email, event, dataObj) {
+  const set = sseClients.get(email);
+  if (!set || !set.size) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(dataObj || {})}\n\n`;
+  for (const res of set) {
+    try { res.write(payload); } catch {}
+  }
+}
+
 // 发送私信。
 app.post("/api/messages", requireVisitor, async (req, res) => {
   if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再发私信。" });
@@ -3008,6 +3019,7 @@ app.post("/api/messages", requireVisitor, async (req, res) => {
       if (isMissingForumTable(error)) return res.status(409).json({ message: "私信功能尚未初始化，请先在 Supabase 执行 messages 迁移。", code: "MIGRATION_REQUIRED" });
       throw error;
     }
+    sseSend(peer.email, "message", { from: myUsername }); // 实时推给对方
     return res.status(201).json({ id: data.id, content: data.content, createdAt: data.created_at, mine: true });
   } catch (error) {
     console.error("Send message failed:", error.message);
@@ -3187,6 +3199,8 @@ app.delete("/api/messages/:id", requireVisitor, async (req, res) => {
       if (!isSender) return res.status(403).json({ message: "只能撤回自己发送的消息。" });
       const { error: dErr } = await supabase.from("forum_messages").delete().eq("id", m.id);
       if (dErr) throw dErr;
+      const myUsername = await getUsername(me);
+      sseSend(m.recipient_email, "message", { from: myUsername }); // 通知对方移除
       return res.json({ deleted: true, recalled: true });
     }
 
@@ -3211,6 +3225,47 @@ app.delete("/api/messages/:id", requireVisitor, async (req, res) => {
     console.error("Delete message failed:", error.message);
     return res.status(500).json({ message: "操作失败，请稍后再试。" });
   }
+});
+
+// 「正在输入」信号：推给对方（仅普通账号）。
+app.post("/api/messages/typing", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ ok: false });
+  const to = String(req.body?.to || "").trim();
+  if (!to) return res.json({ ok: false });
+  try {
+    const peer = await getVisitorByUsername(to);
+    if (!peer || peer.email === req.visitor.email) return res.json({ ok: false });
+    const myUsername = await getUsername(req.visitor.email);
+    if (myUsername) sseSend(peer.email, "typing", { from: myUsername });
+    return res.json({ ok: true });
+  } catch {
+    return res.json({ ok: false });
+  }
+});
+
+// 私信实时推送（SSE）。EventSource 不能带自定义头，令牌通过 ?token= 传入。
+app.get("/api/stream", (req, res) => {
+  const visitor = verifyVisitorToken(String(req.query.token || "").trim());
+  if (!visitor) return res.status(401).end();
+  res.set({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  res.write(": connected\n\n");
+
+  let set = sseClients.get(visitor.email);
+  if (!set) { set = new Set(); sseClients.set(visitor.email, set); }
+  set.add(res);
+
+  const ping = setInterval(() => { try { res.write(": ping\n\n"); } catch {} }, 25000);
+  req.on("close", () => {
+    clearInterval(ping);
+    const s = sseClients.get(visitor.email);
+    if (s) { s.delete(res); if (!s.size) sseClients.delete(visitor.email); }
+  });
 });
 
 // 在帖子下回复（讨论）。

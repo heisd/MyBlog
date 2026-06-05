@@ -65,6 +65,11 @@
     .bubble .bact:hover { text-decoration: underline; }
     .dm-notice { padding: 14px 16px; border-top: 1px solid var(--line); background: var(--card); color: var(--muted); text-align: center; font-size: 0.9rem; line-height: 1.6; }
     .dm-notice a { color: var(--accent-dark); font-weight: 700; text-decoration: none; }
+    .day-sep { align-self: center; margin: 6px 0; padding: 3px 12px; border-radius: 999px; background: rgba(107,98,91,0.12); color: var(--muted); font-size: 0.74rem; }
+    .typing-ind { padding: 6px 16px; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+    .typing-ind .dots span { animation: blink 1.2s infinite; }
+    .typing-ind .dots span:nth-child(2){ animation-delay: 0.2s; } .typing-ind .dots span:nth-child(3){ animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
     .thread-foot { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--card); }
     .thread-foot textarea { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffefb; font: inherit; resize: none; min-height: 44px; max-height: 140px; }
     .thread-foot textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
@@ -192,11 +197,31 @@
     // ---- 会话内容 ----
     let currentCanMessage = false;
     let threadTimer = null;
+    function dayKey(v) { const d = new Date(v); return isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+    function dayLabel(v) {
+      const d = new Date(v); if (isNaN(d.getTime())) return "";
+      const now = new Date();
+      const ymd = (x) => `${x.getFullYear()}-${x.getMonth()+1}-${x.getDate()}`;
+      const y = new Date(now); y.setDate(now.getDate() - 1);
+      if (ymd(d) === ymd(now)) return "今天";
+      if (ymd(d) === ymd(y)) return "昨天";
+      return d.getFullYear() === now.getFullYear() ? `${d.getMonth()+1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    }
+    function dividerHtml(v) { return `<div class="day-sep" data-day="${dayKey(v)}">${escapeHtml(dayLabel(v))}</div>`; }
     function bubbleHtml(m) {
       const acts = m.mine
         ? `<span class="bact" data-act="recall" data-id="${escapeHtml(m.id)}">撤回</span><span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`
         : `<span class="bact" data-act="me" data-id="${escapeHtml(m.id)}">删除</span>`;
-      return `<div class="bubble ${m.mine ? "me" : "them"}" data-mid="${escapeHtml(m.id)}">${escapeHtml(m.content)}<span class="bt">${escapeHtml(fmtTime(m.createdAt))} · ${acts}</span></div>`;
+      return `<div class="bubble ${m.mine ? "me" : "them"}" data-mid="${escapeHtml(m.id)}" data-day="${dayKey(m.createdAt)}">${escapeHtml(m.content)}<span class="bt">${escapeHtml(fmtTime(m.createdAt))} · ${acts}</span></div>`;
+    }
+    function buildMessagesHtml(messages) {
+      let html = "", prev = "";
+      for (const m of messages) {
+        const k = dayKey(m.createdAt);
+        if (k !== prev) { html += dividerHtml(m.createdAt); prev = k; }
+        html += bubbleHtml(m);
+      }
+      return html;
     }
     function onBubbleAction(e) {
       const a = e.target.closest(".bact");
@@ -227,8 +252,9 @@
           <a href="/u/${encodeURIComponent(peer.username)}" title="查看主页">${avatarImg(peer.avatar, "avatar-sm")}<span>${escapeHtml(peer.username)}</span></a>
         </div>
         <div class="thread-body" id="thread-body">
-          ${messages.length ? messages.map(bubbleHtml).join("") : `<div class="empty">还没有消息${canMessage ? "，发送第一条吧。" : "。"}</div>`}
+          ${messages.length ? buildMessagesHtml(messages) : `<div class="empty">还没有消息${canMessage ? "，发送第一条吧。" : "。"}</div>`}
         </div>
+        <div class="typing-ind" id="typing-ind" hidden>${escapeHtml(peer.username)} 正在输入<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
         ${foot}`;
       const body = document.getElementById("thread-body");
       body.scrollTop = body.scrollHeight;
@@ -237,6 +263,7 @@
         const input = document.getElementById("dm-input");
         input.focus();
         input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+        input.addEventListener("input", maybeSendTyping);
         document.getElementById("dm-send").addEventListener("click", sendMessage);
       }
     }
@@ -281,7 +308,7 @@
     // ---- 实时刷新（轮询）----
     function startThreadPolling() {
       clearInterval(threadTimer);
-      threadTimer = setInterval(pollThread, 5000);
+      threadTimer = setInterval(pollThread, 8000); // SSE 负责即时，这里作兜底
     }
     async function pollThread() {
       if (!currentPeer || document.hidden) return;
@@ -293,20 +320,45 @@
     function reconcileMessages(messages) {
       const body = document.getElementById("thread-body");
       if (!body) return;
-      const ids = new Set(messages.map((m) => String(m.id)));
-      // 移除被撤回/删除的
-      body.querySelectorAll(".bubble[data-mid]").forEach((el) => { if (!ids.has(el.getAttribute("data-mid"))) el.remove(); });
-      const have = new Set(Array.from(body.querySelectorAll(".bubble[data-mid]")).map((el) => el.getAttribute("data-mid")));
+      const newIds = messages.map((m) => String(m.id)).join(",");
+      const curIds = Array.from(body.querySelectorAll(".bubble[data-mid]")).map((el) => el.getAttribute("data-mid")).join(",");
+      if (newIds === curIds) return; // 无变化
       const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 90;
-      let appended = false;
-      messages.forEach((m) => {
-        if (!have.has(String(m.id))) {
-          const empt = body.querySelector(".empty"); if (empt) empt.remove();
-          body.insertAdjacentHTML("beforeend", bubbleHtml(m));
-          appended = true;
-        }
-      });
-      if (appended) { loadConversations(); if (nearBottom) body.scrollTop = body.scrollHeight; }
+      const prevTop = body.scrollTop;
+      body.innerHTML = messages.length ? buildMessagesHtml(messages) : `<div class="empty">还没有消息。</div>`;
+      body.scrollTop = nearBottom ? body.scrollHeight : prevTop;
+      loadConversations();
+    }
+
+    // ---- SSE 实时推送 + 正在输入 ----
+    let es = null, lastTypingSent = 0, typingHideTimer = null;
+    function openStream() {
+      const v = token(VISITOR_KEY); if (!v || es) return;
+      try {
+        es = new EventSource(API_BASE + "/api/stream?token=" + encodeURIComponent(v));
+        es.addEventListener("message", onPush);
+        es.addEventListener("typing", onTyping);
+      } catch {}
+    }
+    function onPush(e) {
+      let d = {}; try { d = JSON.parse(e.data || "{}"); } catch {}
+      loadConversations();
+      if (currentPeer && (!d.from || d.from === currentPeer)) pollThread();
+    }
+    function onTyping(e) {
+      let d = {}; try { d = JSON.parse(e.data || "{}"); } catch {}
+      if (!currentPeer || d.from !== currentPeer) return;
+      const el = document.getElementById("typing-ind"); if (!el) return;
+      el.hidden = false;
+      clearTimeout(typingHideTimer);
+      typingHideTimer = setTimeout(() => { el.hidden = true; }, 4000);
+    }
+    function maybeSendTyping() {
+      if (!currentPeer || !currentCanMessage) return;
+      const now = Date.now();
+      if (now - lastTypingSent < 3000) return;
+      lastTypingSent = now;
+      fetch(API_BASE + "/api/messages/typing", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ to: currentPeer }) }).catch(() => {});
     }
 
     document.getElementById("conv-list").addEventListener("click", (e) => {
@@ -330,11 +382,12 @@
         return;
       }
       document.getElementById("dm-main").hidden = false;
+      openStream(); // 实时推送
       await loadConversations();
       const to = new URLSearchParams(location.search).get("to");
       if (to) openThread(to);
-      // 会话列表定时刷新（最近消息 / 未读）
-      setInterval(() => { if (!document.hidden) loadConversations(); }, 12000);
+      // 会话列表定时刷新兜底（最近消息 / 未读）
+      setInterval(() => { if (!document.hidden) loadConversations(); }, 15000);
     })();
   </script>
   <script src="/nav-auth.js" defer></script>
