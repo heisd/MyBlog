@@ -94,6 +94,7 @@ ClaudeAboutWeb/
 - `/forum`：论坛页（登录用户发表文章 / 帖子并互相讨论）
 - `/space`：个人空间（用户自己的写作器，保存草稿或发布到论坛）
 - `/u/:username`：用户公开主页（头像 + 自我介绍 + 创作统计 + 关注 + TA 已发布的文章）
+- `/messages`：私信（与站内用户一对一收发消息）
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
@@ -248,6 +249,7 @@ ClaudeAboutWeb/
 - 「我的文章」列表可**编辑、删除、在草稿 ↔ 已发布之间一键切换**。
 - **个人资料**：可设置**头像**（浏览器内压缩为 96px 方图存储）与**自我介绍**；头像 / 简介会显示在论坛的帖子与回复处。接口：`GET/POST /api/access/profile`。
 - **公开主页 + 关注**：论坛里点作者名片进入 `/u/:username`（头像 / 简介 / 文章 / 获赞 / 讨论 / 粉丝 / 关注），可**关注 / 取消关注**；个人空间「关注动态」展示所关注作者的最新文章。接口：`GET /api/users/:username`、`POST /api/users/:username/follow`、`GET /api/feed`。关注关系表见 [`data/migration-add-follows.sql`](data/migration-add-follows.sql)。
+- **私信（`/messages`）**：与站内用户一对一收发消息。用户主页「✉ 私信」可发起会话；导航栏带**未读小红点**。接口：`POST /api/messages`、`GET /api/messages`（会话列表）、`GET /api/messages/:username`（会话内容，自动标记已读）、`GET /api/messages/unread-count`。消息表见 [`data/migration-add-messages.sql`](data/migration-add-messages.sql)。仅普通账号可用（管理员无私信）。
 - 接口：`GET /api/forum/mine`（列出自己的全部文章，含草稿）、`GET /api/forum/mine/:id`（取回可编辑原文）。
 - 实现：帖子用 `status` 字段区分（`draft` / `published`）；论坛公开列表只查 `published`，草稿详情对非作者一律按「不存在」处理。
 

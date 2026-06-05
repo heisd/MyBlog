@@ -866,7 +866,7 @@ async function fetchAuthorProfiles(emails) {
 function isMissingForumTable(error) {
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;
-  return /forum_posts|forum_replies|forum_post_likes|forum_follows|does not exist|could not find the table/i.test(
+  return /forum_posts|forum_replies|forum_post_likes|forum_follows|forum_messages|does not exist|could not find the table/i.test(
     `${error.message || ""} ${error.details || ""}`
   );
 }
@@ -2936,6 +2936,158 @@ app.get("/api/feed", requireVisitor, async (req, res) => {
   }
 });
 
+// ===== 私信（1 对 1 直接消息）=====
+
+// 按用户名取账号（含资料），用于私信寻址。
+async function getVisitorByUsername(username) {
+  let { data, error } = await supabase
+    .from("visitors").select("email, username, avatar_url, bio").eq("username", username).maybeSingle();
+  if (error && isMissingColumn(error)) {
+    ({ data, error } = await supabase.from("visitors").select("email, username").eq("username", username).maybeSingle());
+  }
+  if (error) throw error;
+  return data || null;
+}
+
+// 发送私信。
+app.post("/api/messages", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再发私信。" });
+  const to = String(req.body?.to || "").trim();
+  const content = String(req.body?.content || "").trim();
+  if (!to) return res.status(400).json({ message: "缺少收件人。" });
+  if (!content) return res.status(400).json({ message: "请填写私信内容。" });
+  if (content.length > 4000) return res.status(400).json({ message: "私信内容过长（上限 4000 字）。" });
+  if (!hitWindow(forumWriteByEmail, `dm:${req.visitor.email}`, FORUM_WINDOW_MS, 120)) {
+    return res.status(429).json({ message: "发送过于频繁，请稍后再试。" });
+  }
+  try {
+    const peer = await getVisitorByUsername(to);
+    if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
+    if (peer.email === req.visitor.email) return res.status(400).json({ message: "不能给自己发私信。" });
+    const { data, error } = await supabase
+      .from("forum_messages")
+      .insert({ sender_email: req.visitor.email, recipient_email: peer.email, content })
+      .select("id, content, created_at")
+      .single();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(409).json({ message: "私信功能尚未初始化，请先在 Supabase 执行 messages 迁移。", code: "MIGRATION_REQUIRED" });
+      throw error;
+    }
+    return res.status(201).json({ id: data.id, content: data.content, createdAt: data.created_at, mine: true });
+  } catch (error) {
+    console.error("Send message failed:", error.message);
+    return res.status(500).json({ message: "发送失败，请稍后再试。" });
+  }
+});
+
+// 会话列表：与我相关的每个对话方的最新一条 + 未读数。
+app.get("/api/messages", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ conversations: [] });
+  const me = req.visitor.email;
+  try {
+    const { data, error } = await supabase
+      .from("forum_messages")
+      .select("sender_email, recipient_email, content, created_at, read_at")
+      .or(`sender_email.eq.${me},recipient_email.eq.${me}`)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ conversations: [], needsMigration: true });
+      throw error;
+    }
+    const rows = data || [];
+    const byPeer = new Map();
+    for (const m of rows) {
+      const peer = m.sender_email === me ? m.recipient_email : m.sender_email;
+      if (!byPeer.has(peer)) {
+        byPeer.set(peer, { peerEmail: peer, lastContent: m.content, lastAt: m.created_at, mine: m.sender_email === me, unread: 0 });
+      }
+      if (m.recipient_email === me && !m.read_at) {
+        byPeer.get(peer).unread += 1;
+      }
+    }
+    // 解析对话方资料
+    const peers = Array.from(byPeer.keys());
+    const profiles = {};
+    if (peers.length) {
+      let pr = await supabase.from("visitors").select("email, username, avatar_url").in("email", peers);
+      if (pr.error && isMissingColumn(pr.error)) pr = await supabase.from("visitors").select("email, username").in("email", peers);
+      if (!pr.error) for (const v of pr.data || []) profiles[v.email] = { username: v.username || null, avatar: v.avatar_url || null };
+    }
+    const conversations = Array.from(byPeer.values())
+      .map((c) => ({
+        username: (profiles[c.peerEmail] && profiles[c.peerEmail].username) || null,
+        avatar: (profiles[c.peerEmail] && profiles[c.peerEmail].avatar) || null,
+        lastMessage: makeExcerpt(c.lastContent, 60),
+        lastAt: c.lastAt,
+        mine: c.mine,
+        unread: c.unread,
+      }))
+      .filter((c) => c.username) // 对方账号还在
+      .sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
+    return res.json({ conversations });
+  } catch (error) {
+    console.error("List conversations failed:", error.message);
+    return res.status(500).json({ message: "加载私信失败，请稍后再试。" });
+  }
+});
+
+// 未读私信总数（导航栏小红点用）。
+app.get("/api/messages/unread-count", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ count: 0 });
+  try {
+    const { count, error } = await supabase
+      .from("forum_messages")
+      .select("*", { count: "exact", head: true })
+      .eq("recipient_email", req.visitor.email)
+      .is("read_at", null);
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ count: 0 });
+      throw error;
+    }
+    return res.json({ count: count || 0 });
+  } catch (error) {
+    console.error("Unread count failed:", error.message);
+    return res.json({ count: 0 });
+  }
+});
+
+// 与某人的会话内容 + 将对方发来的未读标记为已读。
+app.get("/api/messages/:username", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后查看私信。" });
+  const me = req.visitor.email;
+  try {
+    const peer = await getVisitorByUsername(String(req.params.username || "").trim());
+    if (!peer) return res.status(404).json({ message: "对方用户不存在。" });
+    if (peer.email === me) return res.status(400).json({ message: "这是你自己。" });
+
+    const { data, error } = await supabase
+      .from("forum_messages")
+      .select("id, sender_email, content, created_at")
+      .in("sender_email", [me, peer.email])
+      .in("recipient_email", [me, peer.email])
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null }, messages: [] });
+      throw error;
+    }
+
+    // 标记对方发来的未读为已读（不阻塞返回）。
+    supabase.from("forum_messages").update({ read_at: new Date().toISOString() })
+      .eq("recipient_email", me).eq("sender_email", peer.email).is("read_at", null)
+      .then(() => {}, () => {});
+
+    return res.json({
+      peer: { username: peer.username, avatar: peer.avatar_url || null, bio: peer.bio || null },
+      messages: (data || []).map((m) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_email === me })),
+    });
+  } catch (error) {
+    console.error("Read conversation failed:", error.message);
+    return res.status(500).json({ message: "加载会话失败，请稍后再试。" });
+  }
+});
+
 // 在帖子下回复（讨论）。
 app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   const actor = await getForumActor(req);
@@ -3129,6 +3281,10 @@ app.get("/space", (req, res) => {
 
 app.get("/u/:username", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "user.html"));
+});
+
+app.get("/messages", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "messages.html"));
 });
 
 app.get("/welcome", (req, res) => {

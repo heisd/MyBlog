@@ -167,6 +167,7 @@
             </div>
             ${u.canFollow ? `<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <button type="button" class="button ${u.isFollowing ? "button-secondary" : "button-primary"}" id="follow-btn">${u.isFollowing ? "已关注 ✓" : "+ 关注"}</button>
+              <a class="button button-secondary" href="/messages?to=${encodeURIComponent(u.username)}">✉ 私信</a>
               <span class="msg" id="follow-msg" style="min-height:auto;"></span>
             </div>` : ""}
           </div>

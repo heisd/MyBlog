@@ -7,6 +7,7 @@
   var AKEY = "adminToken";
   var UKEY = "cachedUsername";
   var AVKEY = "cachedAvatar";
+  var unreadCount = 0;
 
   function navEl() { return document.querySelector(".nav"); }
   function loggedIn() { return !!(localStorage.getItem(VKEY) || localStorage.getItem(AKEY)); }
@@ -27,7 +28,8 @@
     ".nav-auth .nav-auth-login:hover{background:rgba(204,106,45,.1)}" +
     ".nav-auth .nav-auth-out{color:#b91c1c}" +
     ".nav-av{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--line,#e5dbcf);background:#f0ddc8;flex:none}" +
-    ".nav-av-fb{display:inline-flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,#cc6a2d,#8e4317);font-weight:800;font-size:.8rem}";
+    ".nav-av-fb{display:inline-flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,#cc6a2d,#8e4317);font-weight:800;font-size:.8rem}" +
+    ".nav-dm-badge{background:var(--accent,#cc6a2d);color:#fff;border-radius:999px;font-size:.72rem;font-weight:800;padding:1px 7px;margin-left:2px}";
   document.head.appendChild(style);
 
   function avatarNode() {
@@ -51,6 +53,14 @@
     wrap.className = "nav-auth";
 
     if (loggedIn()) {
+      // 私信入口（仅普通账号；管理员无私信）+ 未读小红点
+      if (localStorage.getItem(VKEY)) {
+        var dm = document.createElement("a");
+        dm.href = "/messages";
+        dm.title = "私信";
+        dm.innerHTML = "✉ 私信" + (unreadCount > 0 ? ' <span class="nav-dm-badge">' + (unreadCount > 99 ? "99+" : unreadCount) + "</span>" : "");
+        wrap.appendChild(dm);
+      }
       var who = document.createElement("a");
       who.href = "/space";
       who.title = "进入我的空间";
@@ -96,6 +106,11 @@
           if (d.avatar) localStorage.setItem(AVKEY, d.avatar); else localStorage.removeItem(AVKEY);
           render();
         })
+        .catch(function () {});
+      // 未读私信数（用于导航栏小红点）
+      fetch(API_BASE + "/api/messages/unread-count", { headers: { "X-Access-Token": v } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && typeof d.count === "number") { unreadCount = d.count; render(); } })
         .catch(function () {});
       return;
     }
