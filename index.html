@@ -357,6 +357,15 @@
       62% { transform: translateZ(0) translateY(-36px) rotate(-17deg) scaleY(1.05); }
       100% { transform: translateZ(0) translateY(0) rotate(-12deg); }
     }
+    /* 落地缓冲：俯冲下降 → 触地下蹲 → 回弹 → 落定站立 */
+    .im-stage.landing .im-figure { animation: im-land 0.72s cubic-bezier(0.25, 0.9, 0.35, 1); }
+    @keyframes im-land {
+      0% { transform: translateZ(0) translateY(-26px) rotate(-12deg); }
+      45% { transform: translateZ(0) translateY(0) rotate(-3deg) scaleY(1.02); }
+      70% { transform: translateZ(0) translateY(9px) rotate(0deg) scaleY(0.9); }
+      86% { transform: translateZ(0) translateY(-3px) scaleY(1.03); }
+      100% { transform: translateZ(0) translateY(0) rotate(0deg) scaleY(1); }
+    }
     /* 点击钢铁侠：眼睛闪光 */
     @keyframes im-eye-flash {
       0% { opacity: 1; filter: brightness(1); }
@@ -552,6 +561,7 @@
       .im-speed,
       .im-stage.flying .im-core,
       .im-stage.launch .im-figure,
+      .im-stage.landing .im-figure,
       .im-figure.flash .im-eye {
         animation: none;
       }
@@ -883,12 +893,10 @@
         figure.classList.remove("flash");
         void figure.offsetWidth; // 重启动画
         figure.classList.add("flash");
-        if (flying) {
-          // 起飞动作：重启一次性 launch 动画
-          stage.classList.remove("launch");
-          void figure.offsetWidth;
-          stage.classList.add("launch");
-        }
+        // 一次性起飞 / 落地动作（重启对应动画）
+        stage.classList.remove("launch", "landing");
+        void figure.offsetWidth;
+        stage.classList.add(flying ? "launch" : "landing");
         quote.textContent = flying
           ? takeoffLines[t++ % takeoffLines.length]
           : landingLines[l++ % landingLines.length];
@@ -899,6 +907,7 @@
       figure.addEventListener("animationend", function (event) {
         if (event.animationName === "im-eye-flash") figure.classList.remove("flash");
         if (event.animationName === "im-launch") stage.classList.remove("launch");
+        if (event.animationName === "im-land") stage.classList.remove("landing");
       });
       stage.addEventListener("click", speak);
       stage.addEventListener("keydown", function (event) {
