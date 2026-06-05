@@ -340,6 +340,8 @@
         if (r.status === 401) { window.location.href = "/welcome"; return; }
         if (!r.ok) { setMsg(profileMsg(), (r.data && r.data.message) || "保存失败。", "error"); btn.disabled = false; return; }
         profile.avatar = r.data.avatar || null; profile.bio = r.data.bio || "";
+        // 同步导航栏头像缓存（其它页面再访问时即更新）。
+        if (profile.avatar) localStorage.setItem("cachedAvatar", profile.avatar); else localStorage.removeItem("cachedAvatar");
         setMsg(profileMsg(), "已保存 ✓", "success"); btn.disabled = false;
         renderProfile(); closeProfileEdit();
       } catch { setMsg(profileMsg(), "网络异常，请稍后再试。", "error"); btn.disabled = false; }
@@ -420,7 +422,8 @@
       try {
         const r = await api("/api/access/username", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ username: u }) });
         if (!r.ok) { setMsg(msg, (r.data && r.data.message) || "保存失败。", "error"); btn.disabled = false; return; }
-        me.username = r.data.username; setMsg(msg, "已保存 ✓", "success"); renderMe(); showUsernameGate(false);
+        me.username = r.data.username; localStorage.setItem("cachedUsername", r.data.username);
+        setMsg(msg, "已保存 ✓", "success"); renderMe(); showUsernameGate(false);
       } catch { setMsg(msg, "网络异常，请稍后再试。", "error"); btn.disabled = false; }
     }
 
