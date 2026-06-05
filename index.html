@@ -341,6 +341,22 @@
       35% { opacity: 0.6; }
       100% { opacity: 0; transform: translate(-12px, 30px); }
     }
+    /* 飞行时：眼睛 / 反应堆更亮 */
+    .im-stage.flying .im-eye { filter: brightness(1.5) drop-shadow(0 0 5px #d6f2ff); }
+    .im-stage.flying .im-ring { filter: drop-shadow(0 0 4px #9fe7ff); }
+    .im-stage.flying .im-core { animation: im-core-fly 1.5s ease-in-out infinite; }
+    @keyframes im-core-fly {
+      0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px rgba(170, 235, 255, 0.95)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 15px rgba(195, 245, 255, 1)); }
+    }
+    /* 起飞动作：蓄力下蹲 → 窜起 → 落定到飞行前倾 */
+    .im-stage.launch .im-figure { animation: im-launch 0.78s cubic-bezier(0.2, 0.8, 0.3, 1); }
+    @keyframes im-launch {
+      0% { transform: translateZ(0) translateY(11px) rotate(0deg) scaleY(0.9); }
+      32% { transform: translateZ(0) translateY(7px) rotate(-4deg) scaleY(1.02); }
+      62% { transform: translateZ(0) translateY(-36px) rotate(-17deg) scaleY(1.05); }
+      100% { transform: translateZ(0) translateY(0) rotate(-12deg); }
+    }
     /* 点击钢铁侠：眼睛闪光 */
     @keyframes im-eye-flash {
       0% { opacity: 1; filter: brightness(1); }
@@ -534,6 +550,8 @@
       .im-jet,
       .im-glow,
       .im-speed,
+      .im-stage.flying .im-core,
+      .im-stage.launch .im-figure,
       .im-figure.flash .im-eye {
         animation: none;
       }
@@ -865,6 +883,12 @@
         figure.classList.remove("flash");
         void figure.offsetWidth; // 重启动画
         figure.classList.add("flash");
+        if (flying) {
+          // 起飞动作：重启一次性 launch 动画
+          stage.classList.remove("launch");
+          void figure.offsetWidth;
+          stage.classList.add("launch");
+        }
         quote.textContent = flying
           ? takeoffLines[t++ % takeoffLines.length]
           : landingLines[l++ % landingLines.length];
@@ -874,6 +898,7 @@
       }
       figure.addEventListener("animationend", function (event) {
         if (event.animationName === "im-eye-flash") figure.classList.remove("flash");
+        if (event.animationName === "im-launch") stage.classList.remove("launch");
       });
       stage.addEventListener("click", speak);
       stage.addEventListener("keydown", function (event) {
