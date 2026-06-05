@@ -104,6 +104,18 @@
     .post-meta .author { color: var(--accent-dark); font-weight: 700; }
     .post-excerpt { margin: 0; color: var(--muted); line-height: 1.8; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; background: rgba(204,106,45,0.12); color: var(--accent-dark); font-size: 0.78rem; font-weight: 700; }
+    .like-btn {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+      background: #fffefb; color: var(--muted); border-radius: 999px; padding: 4px 12px;
+      font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+      transition: color 150ms ease, border-color 150ms ease, transform 150ms ease, background-color 150ms ease;
+    }
+    .like-btn:hover { border-color: var(--accent); color: var(--accent-dark); transform: translateY(-1px); }
+    .like-btn.liked { background: rgba(204,106,45,0.12); border-color: var(--accent); color: var(--accent-dark); }
+    .like-btn .like-ic { font-size: 0.95rem; line-height: 1; }
+    .like-btn.liked .like-ic { animation: like-pop 320ms ease; }
+    .like-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+    @keyframes like-pop { 0%{transform:scale(1)} 40%{transform:scale(1.4)} 100%{transform:scale(1)} }
 
     .post-body { white-space: pre-wrap; word-break: break-word; line-height: 1.9; color: var(--ink); font-size: 1.05rem; margin: 0; }
     .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
@@ -357,6 +369,33 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
+    // 点赞按钮（列表与详情共用）。
+    function likeBtnHtml(p) {
+      return `<button type="button" class="like-btn${p.liked ? " liked" : ""}" data-like="${escapeHtml(p.id)}" aria-pressed="${p.liked ? "true" : "false"}" title="点赞">
+        <span class="like-ic">♥</span><span class="like-n">${p.likeCount || 0}</span></button>`;
+    }
+    function updateLikeButton(btn, liked, count) {
+      btn.classList.toggle("liked", !!liked);
+      btn.setAttribute("aria-pressed", liked ? "true" : "false");
+      const n = btn.querySelector(".like-n");
+      if (n) n.textContent = count;
+    }
+    async function toggleLike(id, btn) {
+      btn.disabled = true;
+      try {
+        const res = await api("/api/forum/posts/" + encodeURIComponent(id) + "/like", {
+          method: "POST", headers: accessHeaders(),
+        });
+        if (res.status === 401) { window.location.href = "/welcome"; return; }
+        if (!res.ok) { alert((res.data && res.data.message) || "操作失败。"); return; }
+        updateLikeButton(btn, res.data.liked, res.data.likeCount);
+      } catch {
+        alert("网络异常，请稍后再试。");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     // ---- 帖子列表 ----
     function postCardHtml(p, i) {
       return `
@@ -366,6 +405,7 @@
             <span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>
             <span>${escapeHtml(fmtDate(p.createdAt))}</span>
             <span class="badge">💬 ${p.replyCount || 0}</span>
+            ${likeBtnHtml(p)}
           </div>
           <p class="post-excerpt">${escapeHtml(p.excerpt || "")}</p>
         </article>`;
@@ -436,7 +476,8 @@
           </div>
           ${p.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-post="${escapeHtml(p.id)}">删除帖子</button>` : ""}
         </div>
-        <p class="post-body">${escapeHtml(p.content)}</p>`;
+        <p class="post-body">${escapeHtml(p.content)}</p>
+        <div class="post-meta" style="margin-top:18px;margin-bottom:0;">${likeBtnHtml(p)}</div>`;
     }
     function replyHtml(r) {
       return `
@@ -532,10 +573,14 @@
     document.getElementById("reply-submit").addEventListener("click", submitReply);
 
     document.getElementById("posts").addEventListener("click", (e) => {
+      const likeBtn = e.target.closest("[data-like]");
+      if (likeBtn) { toggleLike(likeBtn.getAttribute("data-like"), likeBtn); return; }
       const card = e.target.closest(".post-card");
       if (card) openPost(card.dataset.id);
     });
     document.getElementById("detail-post").addEventListener("click", (e) => {
+      const likeBtn = e.target.closest("[data-like]");
+      if (likeBtn) { toggleLike(likeBtn.getAttribute("data-like"), likeBtn); return; }
       const delBtn = e.target.closest("[data-del-post]");
       if (delBtn) deletePost(delBtn.getAttribute("data-del-post"));
     });

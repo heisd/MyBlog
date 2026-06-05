@@ -838,7 +838,7 @@ async function getUsername(email) {
 function isMissingForumTable(error) {
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;
-  return /forum_posts|forum_replies|does not exist|could not find the table/i.test(
+  return /forum_posts|forum_replies|forum_post_likes|does not exist|could not find the table/i.test(
     `${error.message || ""} ${error.details || ""}`
   );
 }
@@ -850,12 +850,13 @@ function makeExcerpt(text, maxLen = 140) {
 }
 
 // 解析「当前发帖人」：登录访客取其用户名；管理员以站点管理员身份发帖。
+// key 是点赞等「每人一次」场景的稳定身份（访客用邮箱，管理员用固定标记）。
 async function getForumActor(req) {
   if (req.visitor) {
-    return { email: req.visitor.email, username: await getUsername(req.visitor.email), isAdmin: false };
+    return { email: req.visitor.email, key: req.visitor.email, username: await getUsername(req.visitor.email), isAdmin: false };
   }
   if (req.adminSession) {
-    return { email: null, username: ADMIN_USERNAME, isAdmin: true };
+    return { email: null, key: "__admin__", username: ADMIN_USERNAME, isAdmin: true };
   }
   return null;
 }
@@ -1828,6 +1829,11 @@ app.delete("/api/admin/visitors/:email", requireAdmin, async (req, res) => {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ message: "用户不存在。" });
+    // 顺手清理该用户在论坛留下的点赞，避免删号后点赞数虚高（论坛表不存在时忽略）。
+    const { error: likeErr } = await supabase.from("forum_post_likes").delete().eq("user_key", email);
+    if (likeErr && !isMissingForumTable(likeErr)) {
+      console.warn("Cleanup likes for deleted visitor failed:", likeErr.message);
+    }
     return res.json({ email: data.email, deleted: true });
   } catch (error) {
     console.error("Delete visitor failed:", error.message);
@@ -2275,7 +2281,10 @@ app.get("/api/forum/posts", requireVisitor, async (req, res) => {
     }
 
     const posts = data || [];
+    const me = await getForumActor(req);
     const counts = {};
+    const likeCounts = {};
+    const likedByMe = new Set();
     if (posts.length) {
       const ids = posts.map((p) => p.id);
       const { data: reps, error: repErr } = await supabase
@@ -2285,9 +2294,18 @@ app.get("/api/forum/posts", requireVisitor, async (req, res) => {
       if (!repErr && Array.isArray(reps)) {
         for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
       }
+      const { data: likes, error: likeErr } = await supabase
+        .from("forum_post_likes")
+        .select("post_id, user_key")
+        .in("post_id", ids);
+      if (!likeErr && Array.isArray(likes)) {
+        for (const l of likes) {
+          likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+          if (me && l.user_key === me.key) likedByMe.add(l.post_id);
+        }
+      }
     }
 
-    const me = await getForumActor(req);
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
     return res.json({
       posts: posts.map((p) => ({
@@ -2298,6 +2316,8 @@ app.get("/api/forum/posts", requireVisitor, async (req, res) => {
         createdAt: p.created_at,
         updatedAt: p.updated_at,
         replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+        liked: likedByMe.has(p.id),
         canDelete: canDelete(p.author_email),
       })),
     });
@@ -2329,6 +2349,15 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
     if (repErr) throw repErr;
 
     const me = await getForumActor(req);
+    const { data: likes, error: likeErr } = await supabase
+      .from("forum_post_likes")
+      .select("user_key")
+      .eq("post_id", post.id);
+    if (likeErr && !isMissingForumTable(likeErr)) throw likeErr;
+    const likeRows = Array.isArray(likes) ? likes : [];
+    const likeCount = likeRows.length;
+    const liked = Boolean(me && likeRows.some((l) => l.user_key === me.key));
+
     const canDelete = (email) => Boolean(me && (me.isAdmin || (me.email && email === me.email)));
     return res.json({
       post: {
@@ -2338,6 +2367,8 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
         content: post.content,
         createdAt: post.created_at,
         updatedAt: post.updated_at,
+        likeCount,
+        liked,
         canDelete: canDelete(post.author_email),
       },
       replies: (replies || []).map((r) => ({
@@ -2443,6 +2474,73 @@ app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   } catch (error) {
     console.error("Create reply failed:", error.message);
     return res.status(500).json({ message: "回复失败，请稍后再试。" });
+  }
+});
+
+// 点赞 / 取消点赞（切换）。每个账号对每帖只算一次；登录即可（无需用户名）。
+app.post("/api/forum/posts/:id/like", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+
+  const key = actor.key;
+  if (!hitWindow(forumWriteByEmail, `like:${key}`, FORUM_WINDOW_MS, 300)) {
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
+  }
+
+  try {
+    const { data: post, error: pErr } = await supabase
+      .from("forum_posts")
+      .select("id")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (pErr) {
+      if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
+      throw pErr;
+    }
+    if (!post) return res.status(404).json({ message: "帖子不存在。" });
+
+    // 已点过赞则取消，否则新增（toggle）。
+    const { data: existing, error: exErr } = await supabase
+      .from("forum_post_likes")
+      .select("user_key")
+      .eq("post_id", post.id)
+      .eq("user_key", key)
+      .maybeSingle();
+    if (exErr) {
+      if (isMissingForumTable(exErr)) {
+        return res.status(409).json({ message: "论坛功能尚未初始化，请先在 Supabase 执行 forum 迁移。", code: "MIGRATION_REQUIRED" });
+      }
+      throw exErr;
+    }
+
+    let liked;
+    if (existing) {
+      const { error } = await supabase
+        .from("forum_post_likes")
+        .delete()
+        .eq("post_id", post.id)
+        .eq("user_key", key);
+      if (error) throw error;
+      liked = false;
+    } else {
+      const { error } = await supabase
+        .from("forum_post_likes")
+        .insert({ post_id: post.id, user_key: key });
+      // 并发下可能已被插入（主键冲突），按「已点赞」处理即可。
+      if (error && error.code !== "23505") throw error;
+      liked = true;
+    }
+
+    const { count, error: cErr } = await supabase
+      .from("forum_post_likes")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", post.id);
+    if (cErr) throw cErr;
+
+    return res.json({ liked, likeCount: count || 0 });
+  } catch (error) {
+    console.error("Toggle like failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
   }
 });
 

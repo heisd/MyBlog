@@ -38,3 +38,15 @@ create table if not exists forum_replies (
 
 create index if not exists forum_replies_post_id_idx
   on forum_replies (post_id, created_at);
+
+-- 4) Post likes (点赞). One row per (post, user). `user_key` is the actor's
+--    identity (a visitor's email, or "__admin__" for the site admin) and is NOT
+--    a FK so the admin (who has no visitors row) can like too. Likes are removed
+--    automatically when their post is deleted.
+create table if not exists forum_post_likes (
+  post_id uuid not null references forum_posts(id) on delete cascade,
+  user_key text not null,
+  created_at timestamptz default now(),
+  primary key (post_id, user_key)
+);
+
