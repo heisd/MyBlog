@@ -13,6 +13,10 @@
       "destination": "/forum.html"
     },
     {
+      "source": "/space",
+      "destination": "/space.html"
+    },
+    {
       "source": "/welcome",
       "destination": "/welcome.html"
     },

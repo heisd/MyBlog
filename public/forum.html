@@ -118,6 +118,17 @@
     @keyframes like-pop { 0%{transform:scale(1)} 40%{transform:scale(1.4)} 100%{transform:scale(1)} }
 
     .post-body { white-space: pre-wrap; word-break: break-word; line-height: 1.9; color: var(--ink); font-size: 1.05rem; margin: 0; }
+    .md-body { line-height: 1.9; color: var(--ink); font-size: 1.05rem; word-break: break-word; }
+    .md-body h1, .md-body h2, .md-body h3 { line-height: 1.3; margin: 1.1em 0 0.5em; color: var(--accent-dark); }
+    .md-body h1 { font-size: 1.5rem; } .md-body h2 { font-size: 1.28rem; } .md-body h3 { font-size: 1.1rem; }
+    .md-body p { margin: 0 0 0.9em; }
+    .md-body ul, .md-body ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+    .md-body blockquote { margin: 0 0 0.9em; padding: 6px 14px; border-left: 3px solid var(--accent); background: rgba(204,106,45,0.07); color: var(--muted); border-radius: 0 8px 8px 0; }
+    .md-body code { background: rgba(107,98,91,0.12); padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+    .md-body pre { background: #2b241d; color: #f4efe7; padding: 14px 16px; border-radius: 12px; overflow: auto; }
+    .md-body pre code { background: none; padding: 0; color: inherit; }
+    .md-body a { color: var(--accent-dark); font-weight: 700; }
+    .md-body hr { border: none; border-top: 1px solid var(--line); margin: 1.2em 0; }
     .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
     .detail-head h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin: 0 0 8px; }
     .replies-title { margin: 8px 0 16px; font-size: 1.1rem; color: var(--accent-dark); }
@@ -150,6 +161,7 @@
         <a href="/">首页</a>
         <a href="/projects">项目归档</a>
         <a href="/forum">论坛</a>
+        <a href="/space">我的空间</a>
         <a href="/contact">联系我</a>
         <a href="/admin-login">进入后台</a>
       </nav>
@@ -236,6 +248,36 @@
 
     let me = null;          // { email, username, isAdmin }
     let currentPostId = null;
+
+    // 安全 Markdown 渲染：先整体转义，再仅引入受控标签；链接限定 http(s)。
+    function mdToSafeHtml(src) {
+      const esc = (s) => String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+      function inline(s) {
+        s = s.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
+        s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+        s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + "</a>");
+        return s;
+      }
+      const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+      const out = []; let i = 0;
+      const isBlock = (l) => /^```/.test(l) || /^#{1,3}\s/.test(l) || /^>\s?/.test(l) || /^\s*[-*]\s+/.test(l) || /^\s*\d+\.\s+/.test(l) || /^(---|\*\*\*)\s*$/.test(l);
+      while (i < lines.length) {
+        const line = lines[i];
+        if (/^```/.test(line)) { const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) { buf.push(esc(lines[i])); i++; } i++; out.push("<pre><code>" + buf.join("\n") + "</code></pre>"); continue; }
+        const h = line.match(/^(#{1,3})\s+(.*)$/);
+        if (h) { const lv = h[1].length; out.push("<h" + lv + ">" + inline(esc(h[2])) + "</h" + lv + ">"); i++; continue; }
+        if (/^>\s?/.test(line)) { const buf = []; while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(inline(esc(lines[i].replace(/^>\s?/, "")))); i++; } out.push("<blockquote>" + buf.join("<br>") + "</blockquote>"); continue; }
+        if (/^\s*[-*]\s+/.test(line)) { const buf = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { buf.push("<li>" + inline(esc(lines[i].replace(/^\s*[-*]\s+/, ""))) + "</li>"); i++; } out.push("<ul>" + buf.join("") + "</ul>"); continue; }
+        if (/^\s*\d+\.\s+/.test(line)) { const buf = []; while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { buf.push("<li>" + inline(esc(lines[i].replace(/^\s*\d+\.\s+/, ""))) + "</li>"); i++; } out.push("<ol>" + buf.join("") + "</ol>"); continue; }
+        if (/^(---|\*\*\*)\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+        if (/^\s*$/.test(line)) { i++; continue; }
+        const buf = [];
+        while (i < lines.length && !/^\s*$/.test(lines[i]) && !isBlock(lines[i])) { buf.push(inline(esc(lines[i]))); i++; }
+        out.push("<p>" + buf.join("<br>") + "</p>");
+      }
+      return out.join("\n");
+    }
 
     function token(key) { return localStorage.getItem(key); }
     function accessHeaders(extra) {
@@ -476,7 +518,7 @@
           </div>
           ${p.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-post="${escapeHtml(p.id)}">删除帖子</button>` : ""}
         </div>
-        <p class="post-body">${escapeHtml(p.content)}</p>
+        <div class="md-body">${mdToSafeHtml(p.content)}</div>
         <div class="post-meta" style="margin-top:18px;margin-bottom:0;">${likeBtnHtml(p)}</div>`;
     }
     function replyHtml(r) {

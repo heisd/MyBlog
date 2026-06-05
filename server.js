@@ -849,6 +849,11 @@ function makeExcerpt(text, maxLen = 140) {
   return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen).trim()}…`;
 }
 
+// 帖子状态：draft（仅作者「我的空间」可见）/ published（公开在论坛）。
+function normalizeForumStatus(value) {
+  return value === "draft" ? "draft" : "published";
+}
+
 // 解析「当前发帖人」：登录访客取其用户名；管理员以站点管理员身份发帖。
 // key 是点赞等「每人一次」场景的稳定身份（访客用邮箱，管理员用固定标记）。
 async function getForumActor(req) {
@@ -2270,11 +2275,21 @@ setInterval(() => {
 // 帖子列表（含每帖回复数）。倒序，最多 200 条。
 app.get("/api/forum/posts", requireVisitor, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    // 公开论坛仅展示「已发布」帖子；草稿只在作者的「我的空间」可见。
+    let { data, error } = await supabase
       .from("forum_posts")
       .select("id, author_email, author_username, title, content, created_at, updated_at")
+      .neq("status", "draft")
       .order("created_at", { ascending: false })
       .limit(200);
+    // status 列未迁移时回退到不带过滤的查询（旧库全部视为已发布）。
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .select("id, author_email, author_username, title, content, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(200));
+    }
     if (error) {
       if (isMissingForumTable(error)) return res.json({ posts: [], needsMigration: true });
       throw error;
@@ -2341,6 +2356,13 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
 
+    const me = await getForumActor(req);
+    const isOwner = Boolean(me && (me.isAdmin || (me.email && post.author_email === me.email)));
+    // 草稿只对作者本人 / 管理员可见，其余一律按「不存在」处理。
+    if (post.status === "draft" && !isOwner) {
+      return res.status(404).json({ message: "帖子不存在。" });
+    }
+
     const { data: replies, error: repErr } = await supabase
       .from("forum_replies")
       .select("*")
@@ -2348,7 +2370,6 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
       .order("created_at", { ascending: true });
     if (repErr) throw repErr;
 
-    const me = await getForumActor(req);
     const { data: likes, error: likeErr } = await supabase
       .from("forum_post_likes")
       .select("user_key")
@@ -2365,10 +2386,12 @@ app.get("/api/forum/posts/:id", requireVisitor, async (req, res) => {
         authorUsername: post.author_username,
         title: post.title,
         content: post.content,
+        status: post.status === "draft" ? "draft" : "published",
         createdAt: post.created_at,
         updatedAt: post.updated_at,
         likeCount,
         liked,
+        canEdit: isOwner,
         canDelete: canDelete(post.author_email),
       },
       replies: (replies || []).map((r) => ({
@@ -2394,21 +2417,32 @@ app.post("/api/forum/posts", requireVisitor, async (req, res) => {
   }
   const title = String(req.body?.title || "").trim();
   const content = String(req.body?.content || "").trim();
+  const status = normalizeForumStatus(req.body?.status);
   if (!title || !content) return res.status(400).json({ message: "请填写标题和内容。" });
   if (title.length > 120) return res.status(400).json({ message: "标题不超过 120 字。" });
   if (content.length > 20000) return res.status(400).json({ message: "内容过长（上限 20000 字）。" });
 
   const key = actor.email || "admin";
   if (!hitWindow(forumWriteByEmail, `post:${key}`, FORUM_WINDOW_MS, FORUM_POST_MAX)) {
-    return res.status(429).json({ message: "发帖过于频繁，请稍后再试。" });
+    return res.status(429).json({ message: "操作过于频繁，请稍后再试。" });
   }
 
   try {
-    const { data, error } = await supabase
+    const row = { author_email: actor.email, author_username: actor.username, title, content, status };
+    let { data, error } = await supabase
       .from("forum_posts")
-      .insert({ author_email: actor.email, author_username: actor.username, title, content })
-      .select("id, author_username, title, content, created_at, updated_at")
+      .insert(row)
+      .select("id, author_username, title, content, status, created_at, updated_at")
       .single();
+    // status 列未迁移时去掉该字段重试（仍可创建，按已发布处理）。
+    if (error && isMissingColumn(error)) {
+      const { status: _omit, ...base } = row;
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .insert(base)
+        .select("id, author_username, title, content, created_at, updated_at")
+        .single());
+    }
     if (error) {
       if (isMissingForumTable(error)) {
         return res.status(409).json({ message: "论坛功能尚未初始化，请先在 Supabase 执行 forum 迁移。", code: "MIGRATION_REQUIRED" });
@@ -2420,13 +2454,164 @@ app.post("/api/forum/posts", requireVisitor, async (req, res) => {
       authorUsername: data.author_username,
       title: data.title,
       content: data.content,
+      status: data.status === "draft" ? "draft" : "published",
       createdAt: data.created_at,
       updatedAt: data.updated_at,
+      canEdit: true,
       canDelete: true,
     });
   } catch (error) {
     console.error("Create forum post failed:", error.message);
-    return res.status(500).json({ message: "发帖失败，请稍后再试。" });
+    return res.status(500).json({ message: "保存失败，请稍后再试。" });
+  }
+});
+
+// 编辑自己的帖子（标题 / 正文 / 发布状态）。作者本人或管理员可改。
+app.put("/api/forum/posts/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  if (!actor.username) {
+    return res.status(403).json({ message: "请先设置用户名。", code: "USERNAME_REQUIRED" });
+  }
+  const title = String(req.body?.title || "").trim();
+  const content = String(req.body?.content || "").trim();
+  const status = normalizeForumStatus(req.body?.status);
+  if (!title || !content) return res.status(400).json({ message: "请填写标题和内容。" });
+  if (title.length > 120) return res.status(400).json({ message: "标题不超过 120 字。" });
+  if (content.length > 20000) return res.status(400).json({ message: "内容过长（上限 20000 字）。" });
+
+  try {
+    const { data: existing, error: selErr } = await supabase
+      .from("forum_posts")
+      .select("author_email")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (selErr) {
+      if (isMissingForumTable(selErr)) return res.status(404).json({ message: "帖子不存在。" });
+      throw selErr;
+    }
+    if (!existing) return res.status(404).json({ message: "帖子不存在。" });
+    if (!actor.isAdmin && !(actor.email && existing.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能编辑自己的文章。" });
+    }
+
+    const patch = { title, content, status, updated_at: new Date().toISOString() };
+    let { data, error } = await supabase
+      .from("forum_posts")
+      .update(patch)
+      .eq("id", req.params.id)
+      .select("id, author_username, title, content, status, created_at, updated_at")
+      .single();
+    if (error && isMissingColumn(error)) {
+      const { status: _omit, ...base } = patch;
+      ({ data, error } = await supabase
+        .from("forum_posts")
+        .update(base)
+        .eq("id", req.params.id)
+        .select("id, author_username, title, content, created_at, updated_at")
+        .single());
+    }
+    if (error) throw error;
+    return res.json({
+      id: data.id,
+      authorUsername: data.author_username,
+      title: data.title,
+      content: data.content,
+      status: data.status === "draft" ? "draft" : "published",
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      canEdit: true,
+      canDelete: true,
+    });
+  } catch (error) {
+    console.error("Update forum post failed:", error.message);
+    return res.status(500).json({ message: "保存失败，请稍后再试。" });
+  }
+});
+
+// 我的空间：列出当前用户自己的全部帖子（含草稿）。
+app.get("/api/forum/mine", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    let query = supabase
+      .from("forum_posts")
+      .select("id, author_email, author_username, title, content, status, created_at, updated_at")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    // 访客按邮箱归属；管理员归属为「无邮箱」的管理员帖子。
+    query = actor.isAdmin ? query.is("author_email", null) : query.eq("author_email", actor.email);
+    let { data, error } = await query;
+    if (error && isMissingColumn(error)) {
+      let q2 = supabase
+        .from("forum_posts")
+        .select("id, author_email, author_username, title, content, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(300);
+      q2 = actor.isAdmin ? q2.is("author_email", null) : q2.eq("author_email", actor.email);
+      ({ data, error } = await q2);
+    }
+    if (error) {
+      if (isMissingForumTable(error)) return res.json({ posts: [], needsMigration: true });
+      throw error;
+    }
+    const posts = data || [];
+    const counts = {};
+    const likeCounts = {};
+    if (posts.length) {
+      const ids = posts.map((p) => p.id);
+      const { data: reps } = await supabase.from("forum_replies").select("post_id").in("post_id", ids);
+      if (Array.isArray(reps)) for (const r of reps) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const { data: likes } = await supabase.from("forum_post_likes").select("post_id").in("post_id", ids);
+      if (Array.isArray(likes)) for (const l of likes) likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1;
+    }
+    return res.json({
+      posts: posts.map((p) => ({
+        id: p.id,
+        title: p.title,
+        excerpt: makeExcerpt(p.content),
+        status: p.status === "draft" ? "draft" : "published",
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        replyCount: counts[p.id] || 0,
+        likeCount: likeCounts[p.id] || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("List my posts failed:", error.message);
+    return res.status(500).json({ message: "加载我的文章失败，请稍后再试。" });
+  }
+});
+
+// 获取自己某篇文章的可编辑原文（含草稿）。
+app.get("/api/forum/mine/:id", requireVisitor, async (req, res) => {
+  const actor = await getForumActor(req);
+  if (!actor) return res.status(401).json({ message: "需要登录。" });
+  try {
+    const { data: post, error } = await supabase
+      .from("forum_posts")
+      .select("*")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (error) {
+      if (isMissingForumTable(error)) return res.status(404).json({ message: "文章不存在。" });
+      throw error;
+    }
+    if (!post) return res.status(404).json({ message: "文章不存在。" });
+    if (!actor.isAdmin && !(actor.email && post.author_email === actor.email)) {
+      return res.status(403).json({ message: "只能编辑自己的文章。" });
+    }
+    return res.json({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      status: post.status === "draft" ? "draft" : "published",
+      createdAt: post.created_at,
+      updatedAt: post.updated_at,
+    });
+  } catch (error) {
+    console.error("Read my post failed:", error.message);
+    return res.status(500).json({ message: "加载文章失败，请稍后再试。" });
   }
 });
 
@@ -2449,14 +2634,17 @@ app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   try {
     const { data: post, error: pErr } = await supabase
       .from("forum_posts")
-      .select("id")
+      .select("id, author_email, status")
       .eq("id", req.params.id)
       .maybeSingle();
     if (pErr) {
       if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
-      throw pErr;
+      if (!isMissingColumn(pErr)) throw pErr;
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
+    // 草稿不可被他人回复。
+    const ownerOnly = post.status === "draft" && !(actor.isAdmin || (actor.email && post.author_email === actor.email));
+    if (ownerOnly) return res.status(404).json({ message: "帖子不存在。" });
 
     const { data, error } = await supabase
       .from("forum_replies")
@@ -2490,14 +2678,18 @@ app.post("/api/forum/posts/:id/like", requireVisitor, async (req, res) => {
   try {
     const { data: post, error: pErr } = await supabase
       .from("forum_posts")
-      .select("id")
+      .select("id, author_email, status")
       .eq("id", req.params.id)
       .maybeSingle();
     if (pErr) {
       if (isMissingForumTable(pErr)) return res.status(404).json({ message: "帖子不存在。" });
-      throw pErr;
+      if (!isMissingColumn(pErr)) throw pErr;
     }
     if (!post) return res.status(404).json({ message: "帖子不存在。" });
+    // 草稿不可被他人点赞。
+    if (post.status === "draft" && !(actor.isAdmin || (actor.email && post.author_email === actor.email))) {
+      return res.status(404).json({ message: "帖子不存在。" });
+    }
 
     // 已点过赞则取消，否则新增（toggle）。
     const { data: existing, error: exErr } = await supabase
@@ -2608,6 +2800,10 @@ app.get("/contact", (req, res) => {
 
 app.get("/forum", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "forum.html"));
+});
+
+app.get("/space", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "space.html"));
 });
 
 app.get("/welcome", (req, res) => {

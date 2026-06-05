@@ -50,3 +50,10 @@ create table if not exists forum_post_likes (
   primary key (post_id, user_key)
 );
 
+-- 5) Personal space: each post has a status.
+--    'draft'     = only visible to its author in their personal space (未发布)
+--    'published' = public on the forum (默认，向后兼容已有帖子)
+alter table forum_posts add column if not exists status text not null default 'published';
+create index if not exists forum_posts_status_idx on forum_posts (status, created_at desc);
+
+
