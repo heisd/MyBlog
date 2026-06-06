@@ -3295,6 +3295,16 @@ const PET_RARITY = { st: "common", esp: "common", sensor: "common", linux: "rare
 const PET_WEIGHTS = { st: 28, esp: 28, sensor: 24, linux: 9, arm: 8, robotarm: 3 };
 const FEED_COOLDOWN_MS = 30 * 60 * 1000; // 喂食冷却 30 分钟
 const CHECKIN_REWARD = 30;               // 每日签到给每只宠物的经验
+const MOOD_DECAY_PER_HOUR = 4;           // 心情每小时衰减
+const MOOD_GAIN = { feed: 12, play: 15, train: 8, pet: 10 };
+
+// 按距上次心情变化的时间衰减后的当前心情（0-100）。
+function effectiveMood(p) {
+  const base = p && typeof p.mood === "number" ? p.mood : 80;
+  if (!p || !p.mood_at) return Math.max(0, Math.min(100, base));
+  const hours = (Date.now() - new Date(p.mood_at).getTime()) / 3600000;
+  return Math.max(0, Math.min(100, Math.round(base - hours * MOOD_DECAY_PER_HOUR)));
+}
 
 function weightedSpecies() {
   let total = 0;
@@ -3317,7 +3327,7 @@ function serializePet(p) {
   return {
     id: p.id, species: p.species, name: p.name, level: p.level, exp: p.exp,
     need: p.level * 100, rarity: PET_RARITY[p.species] || "common",
-    createdAt: p.created_at, lastFedAt: p.last_fed_at || null,
+    mood: effectiveMood(p), createdAt: p.created_at, lastFedAt: p.last_fed_at || null,
   };
 }
 // 今天是否已签到（按 UTC 日期比较）。
@@ -3402,7 +3412,13 @@ app.post("/api/pets/:id/action", requireVisitor, async (req, res) => {
     const grown = petGrow(pet.level, pet.exp + gain);
     const patch = { level: grown.level, exp: grown.exp };
     if (action === "feed") patch.last_fed_at = new Date().toISOString();
-    const { data, error: uErr } = await supabase.from("pets").update(patch).eq("id", pet.id).select("*").single();
+    patch.mood = Math.max(0, Math.min(100, effectiveMood(pet) + (MOOD_GAIN[action] || 5)));
+    patch.mood_at = new Date().toISOString();
+    let { data, error: uErr } = await supabase.from("pets").update(patch).eq("id", pet.id).select("*").single();
+    if (uErr && isMissingColumn(uErr)) { // mood 列未迁移时去掉再存
+      const { mood, mood_at, ...base } = patch;
+      ({ data, error: uErr } = await supabase.from("pets").update(base).eq("id", pet.id).select("*").single());
+    }
     if (uErr) throw uErr;
     return res.json({ pet: serializePet(data), gained: gain, leveledUp: grown.level > pet.level });
   } catch (error) {

@@ -2,9 +2,11 @@
 (function () {
   "use strict";
   var API_BASE = "https://myblogbackend-njns.onrender.com";
+  var FEED_COOLDOWN_MS = 30 * 60 * 1000;
   var v = localStorage.getItem("visitorAccessToken");
   if (!v) return; // 仅登录普通账号（管理员无宠物）
   if (document.querySelector(".pet-fab")) return; // 防重复注入
+  function feedReady(p) { return !p.lastFedAt || (Date.now() - new Date(p.lastFedAt).getTime() >= FEED_COOLDOWN_MS); }
 
   function petArt(sp) {
     var C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d", robotarm: "#4d5b66" };
@@ -62,9 +64,19 @@
     ".pet-fab .pet-fab-badge{position:absolute;top:-4px;right:-4px;background:#cc6a2d;color:#fff;border-radius:999px;font:800 11px Georgia,serif;padding:1px 6px;box-shadow:0 4px 10px rgba(204,106,45,.4)}" +
     ".pet-fab .pet-fab-label{position:absolute;left:66px;bottom:16px;white-space:nowrap;background:#15161a;color:#fff;font:700 12px Georgia,serif;padding:6px 10px;border-radius:10px;opacity:0;transform:translateX(-6px);transition:opacity .15s ease,transform .15s ease;pointer-events:none}" +
     ".pet-fab:hover .pet-fab-label{opacity:1;transform:none}" +
-    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}.pet-fab .pet-fab-art{animation:none}}";
+    ".pet-fab-cry{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;background:#cc6a2d;color:#fff;font:800 12px Georgia,serif;padding:5px 10px;border-radius:10px;white-space:nowrap;box-shadow:0 8px 18px rgba(204,106,45,.4);animation:pet-cry 1.4s ease-in-out infinite}" +
+    '.pet-fab-cry::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#cc6a2d}' +
+    "@keyframes pet-cry{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-3px)}}" +
+    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}.pet-fab .pet-fab-art{animation:none}.pet-fab-cry{animation:none}}";
   document.head.appendChild(style);
 
+  function showCry(el) {
+    if (!el || el.querySelector(".pet-fab-cry")) return;
+    var c = document.createElement("span");
+    c.className = "pet-fab-cry";
+    c.textContent = "🍚 我饿了";
+    el.appendChild(c);
+  }
   function render(pets) {
     if (document.querySelector(".pet-fab")) return;
     var el = document.createElement("a");
@@ -81,6 +93,15 @@
       el.innerHTML = '<span class="pet-fab-paw">🐾</span><span class="pet-fab-label">领养一只宠物</span>';
     }
     document.body.appendChild(el);
+    // 喂食冷却结束 → 冒「我饿了」提醒（已就绪立刻显示，否则到点再显示）。
+    if (pets && pets.length) {
+      var p0 = pets[0];
+      if (feedReady(p0)) showCry(el);
+      else {
+        var remain = FEED_COOLDOWN_MS - (Date.now() - new Date(p0.lastFedAt).getTime());
+        if (remain > 0 && remain <= FEED_COOLDOWN_MS) setTimeout(function () { showCry(el); }, remain + 500);
+      }
+    }
   }
 
   fetch(API_BASE + "/api/pets", { headers: { "X-Access-Token": v } })

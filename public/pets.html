@@ -62,6 +62,7 @@
     .pet-lv { color: var(--accent-dark); font-weight: 700; font-size: 0.9rem; margin-top: 8px; }
     .exp-bar { height: 8px; background: rgba(107,98,91,0.15); border-radius: 999px; overflow: hidden; margin: 6px 0 12px; }
     .exp-fill { height: 100%; background: linear-gradient(90deg,#cc6a2d,#e0883f); border-radius: 999px; transition: width 300ms ease; }
+    .pet-mood { font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; }
     .pet-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
     .pet-actions .button { padding: 8px 12px; font-size: 0.88rem; }
     .pet-foot { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
@@ -248,6 +249,7 @@
           <div class="pet-sp">${escapeHtml(meta.label)} ${rarityChip(p.rarity || meta.rarity)}</div>
           <div class="pet-lv" data-lv>Lv.${p.level} · ${p.exp}/${p.need} EXP</div>
           <div class="exp-bar"><div class="exp-fill" data-exp style="width:${pct}%"></div></div>
+          <div class="pet-mood" data-mood>${moodHtml(p.mood)}</div>
           <div class="pet-actions">
             <button type="button" class="button button-secondary" data-act="feed">🍚 喂食</button>
             <button type="button" class="button button-secondary" data-act="play">🎾 玩耍</button>
@@ -345,12 +347,16 @@
       sensor: ["我看到你啦！👀", "环境数据正常。"],
       robotarm: ["抓取成功！", "关节已校准。"],
     };
+    const LOW_MOOD_LINES = ["好久没人陪我了…", "终于等到你～", "呜…刚才有点孤单。", "你再不来我就要长草了。"];
     function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-    function lineFor(act, species, leveledUp) {
+    function lineFor(act, species, leveledUp, mood) {
       if (leveledUp) return pick(LINES.levelup);
+      if (typeof mood === "number" && mood < 30) return pick(LOW_MOOD_LINES);
       if (act === "pet") { const pool = LINES.pet.concat(SPECIES_LINES[species] || []); return pick(pool); }
       return pick(LINES[act] || LINES.pet);
     }
+    function moodFace(m) { return m >= 80 ? "😄" : m >= 50 ? "🙂" : m >= 25 ? "😕" : "😢"; }
+    function moodHtml(m) { m = (typeof m === "number") ? m : 80; return `${moodFace(m)} 心情 ${m}`; }
     function bounce(card) {
       const art = card.querySelector(".pet-art"); if (!art) return;
       art.classList.remove("bounce"); void art.offsetWidth; art.classList.add("bounce");
@@ -364,6 +370,7 @@
     function updateCardStats(card, p) {
       const lv = card.querySelector("[data-lv]"); if (lv) lv.textContent = `Lv.${p.level} · ${p.exp}/${p.need} EXP`;
       const ex = card.querySelector("[data-exp]"); if (ex) ex.style.width = Math.min(100, Math.round((p.exp / (p.need || 1)) * 100)) + "%";
+      const md = card.querySelector("[data-mood]"); if (md && typeof p.mood === "number") md.innerHTML = moodHtml(p.mood);
     }
 
     let acting = false;
@@ -385,6 +392,8 @@
       // 互动：feed / play / train / pet —— 原地更新 + 动作 + 台词
       if (acting) return;
       acting = true;
+      const prev = pets.find((x) => x.id === id);
+      const prevMood = prev && typeof prev.mood === "number" ? prev.mood : null;
       try {
         const r = await api("/api/pets/" + encodeURIComponent(id) + "/action", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: act }) });
         if (r.status === 401) { window.location.href = "/welcome"; return; }
@@ -393,7 +402,7 @@
         if (idx >= 0) pets[idx] = r.data.pet;
         updateCardStats(card, r.data.pet);
         bounce(card);
-        showBubble(card, lineFor(act, r.data.pet.species, r.data.leveledUp));
+        showBubble(card, lineFor(act, r.data.pet.species, r.data.leveledUp, prevMood));
         setMsg(m, r.data.leveledUp ? `+${r.data.gained} EXP · 升级啦！🎉` : `+${r.data.gained} EXP`, "success");
       } catch {
         setMsg(m, "网络异常，请稍后再试。", "error");

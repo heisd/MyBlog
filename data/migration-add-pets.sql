@@ -15,3 +15,7 @@ create index if not exists pets_owner_idx on pets (owner_email, created_at);
 
 -- 每日签到时间（每人每天一次，给宠物加经验）。
 alter table visitors add column if not exists last_checkin_at timestamptz;
+
+-- 心情值（0-100）：随时间衰减，互动后回升；mood_at 记录上次心情变化时间。
+alter table pets add column if not exists mood int not null default 80;
+alter table pets add column if not exists mood_at timestamptz default now();
