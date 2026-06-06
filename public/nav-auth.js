@@ -53,6 +53,14 @@
     wrap.className = "nav-auth";
 
     if (loggedIn()) {
+      // 宠物入口（仅普通账号）
+      if (localStorage.getItem(VKEY)) {
+        var pet = document.createElement("a");
+        pet.href = "/pets";
+        pet.title = "我的宠物";
+        pet.textContent = "🐾 宠物";
+        wrap.appendChild(pet);
+      }
       // 私信入口（仅普通账号；管理员无私信）+ 未读小红点
       if (localStorage.getItem(VKEY)) {
         var dm = document.createElement("a");
@@ -132,4 +140,13 @@
 
   render();
   refresh();
+
+  // 全站浮动宠物挂件（仅登录的普通账号）。在每个引入 nav-auth 的页面自动注入。
+  if (localStorage.getItem(VKEY) && !document.getElementById("pets-widget-js")) {
+    var pw = document.createElement("script");
+    pw.id = "pets-widget-js";
+    pw.src = "/pets-widget.js";
+    pw.defer = true;
+    document.body.appendChild(pw);
+  }
 })();

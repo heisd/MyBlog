@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>宠物 | Heisd.Stark</title>
+  <style>
+    :root {
+      --bg: #f4efe7; --paper: rgba(255,253,247,0.92); --card: #fffdf8; --ink: #1f1f1f;
+      --muted: #6b625b; --accent: #cc6a2d; --accent-dark: #8e4317; --line: #e5dbcf;
+      --danger: #b91c1c; --shadow: 0 22px 50px rgba(68,48,30,0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; color: var(--ink); min-height: 100vh;
+      background: radial-gradient(circle at top left, rgba(204,106,45,0.14), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(142,67,23,0.08), transparent 24%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%); }
+    .topbar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+      background: rgba(248,244,237,0.78); border-bottom: 1px solid rgba(229,219,207,0.9); }
+    .topbar-inner { max-width: 1000px; margin: 0 auto; padding: 18px 24px; display: flex;
+      align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+    .brand { font-weight: 700; color: var(--accent-dark); text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.95rem; }
+    .nav { display: flex; gap: 16px; flex-wrap: wrap; }
+    .nav a { color: var(--muted); text-decoration: none; font-size: 0.96rem; font-weight: 700; }
+    .nav a:hover { color: var(--accent-dark); }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 36px 24px 90px; }
+    .hero { background: var(--paper); border: 1px solid rgba(229,219,207,0.96); border-radius: 26px; padding: 30px 36px; margin-bottom: 22px; box-shadow: var(--shadow); }
+    .eyebrow { letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-dark); font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+    .hero h1 { margin: 0 0 8px; font-size: clamp(2rem,4vw,2.8rem); }
+    .hero p { margin: 0; max-width: 60ch; color: var(--muted); line-height: 1.8; }
+    .panel { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 20px; box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 20px; }
+    .panel h2 { margin: 0 0 14px; font-size: 1.25rem; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 18px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-weight: 700; text-decoration: none; color: var(--ink); transition: transform 160ms ease; }
+    .button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .button-primary { background: linear-gradient(120deg,#cc6a2d,#e0883f,#8e4317,#cc6a2d); background-size: 300% 100%; color: #fff; }
+    .button-secondary { background: rgba(255,255,255,0.85); border: 1px solid var(--line); }
+    .button-ghost { background: none; color: var(--muted); padding: 7px 12px; font-size: 0.86rem; }
+    .button-ghost:hover { color: var(--accent-dark); }
+    .button-danger { color: var(--danger); }
+    .button:hover:not(:disabled) { transform: translateY(-1px); }
+    .msg { min-height: 18px; font-size: 0.9rem; line-height: 1.6; color: var(--muted); }
+    .msg.error { color: var(--danger); } .msg.success { color: #2f6b30; }
+    .form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .field input { padding: 11px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffefb; font: inherit; font-size: 1rem; }
+    .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204,106,45,0.14); }
+
+    .pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .pet-card { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px; box-shadow: var(--shadow); padding: 18px; text-align: center; }
+    .pet-art { width: 110px; height: 110px; margin: 0 auto 6px; }
+    .pet-name { font-weight: 800; font-size: 1.1rem; }
+    .pet-sp { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+    .pet-lv { color: var(--accent-dark); font-weight: 700; font-size: 0.9rem; margin-top: 8px; }
+    .exp-bar { height: 8px; background: rgba(107,98,91,0.15); border-radius: 999px; overflow: hidden; margin: 6px 0 12px; }
+    .exp-fill { height: 100%; background: linear-gradient(90deg,#cc6a2d,#e0883f); border-radius: 999px; transition: width 300ms ease; }
+    .pet-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .pet-actions .button { padding: 8px 12px; font-size: 0.88rem; }
+    .pet-foot { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+
+    .dex { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .dex-card { border: 1px solid var(--line); border-radius: 16px; padding: 14px; text-align: center; background: #fffefb; }
+    .dex-art { width: 84px; height: 84px; margin: 0 auto 6px; }
+    .dex-card .t { font-weight: 800; }
+    .dex-card .d { color: var(--muted); font-size: 0.82rem; line-height: 1.6; margin-top: 4px; }
+
+    .pop { font-size: 0.82rem; color: #2f6b30; font-weight: 800; }
+    .empty, .error, .loading { background: var(--paper); border: 1px dashed var(--line); border-radius: 16px; padding: 26px; color: var(--muted); text-align: center; line-height: 1.8; }
+    .error { color: var(--danger); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Heisd.Stark</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/projects">项目归档</a>
+        <a href="/forum">论坛</a>
+        <a href="/space">我的空间</a>
+        <a href="/contact">联系我</a>
+        <a href="/admin-login">进入后台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel" id="auth-gate" hidden>
+      <h2>请先登录账号</h2>
+      <p class="msg">宠物系统需要登录后使用。</p>
+      <div class="form-actions">
+        <a class="button button-primary" href="/welcome">去登录 / 注册 →</a>
+        <a class="button button-secondary" href="/">返回首页</a>
+      </div>
+    </section>
+
+    <div class="loading" id="checking">正在确认登录状态…</div>
+
+    <div id="pets-main" hidden>
+      <section class="hero">
+        <div class="eyebrow">Pets</div>
+        <h1>电子宠物</h1>
+        <p>共有 5 个系列：ST、ESP、Linux、Arm、传感器。领养时<strong>随机分配</strong>一个系列——你负责起名字，并通过喂食、玩耍、训练把它养大。</p>
+      </section>
+
+      <section class="panel">
+        <h2>领养一只（随机系列）</h2>
+        <div class="form-actions">
+          <span class="field"><input type="text" id="adopt-name" maxlength="20" placeholder="给它起个名字"></span>
+          <button type="button" class="button button-primary" id="adopt-btn">🎲 随机领养</button>
+          <span class="msg" id="adopt-msg"></span>
+        </div>
+      </section>
+
+      <h2 style="font-size:1.2rem;margin:6px 2px 14px;color:var(--accent-dark);">我的宠物</h2>
+      <div id="pets" class="pet-grid"></div>
+
+      <h2 style="font-size:1.2rem;margin:28px 2px 14px;color:var(--accent-dark);">宠物图鉴</h2>
+      <div class="dex" id="dex"></div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "https://myblogbackend-njns.onrender.com";
+    const VISITOR_KEY = "visitorAccessToken";
+    const ADMIN_KEY = "adminToken";
+    const SPECIES = {
+      st: { label: "ST 系列", desc: "稳定可靠的单片机精灵，做事一丝不苟。" },
+      esp: { label: "ESP 系列", desc: "自带 WiFi 的联网冲浪手，消息最灵通。" },
+      linux: { label: "Linux 系列", desc: "开源内核出身的全能伙伴，命令行高手。" },
+      arm: { label: "Arm 系列", desc: "低功耗高能效的核心，耐力惊人。" },
+      sensor: { label: "传感器系列", desc: "明察秋毫的小眼睛，感知世界的一切。" },
+    };
+
+    function token(k) { return localStorage.getItem(k); }
+    function accessHeaders(extra) {
+      const h = Object.assign({}, extra || {});
+      const v = token(VISITOR_KEY); if (v) h["X-Access-Token"] = v;
+      const a = token(ADMIN_KEY); if (a) h["Authorization"] = "Bearer " + a;
+      return h;
+    }
+    function escapeHtml(t) { return String(t ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;"); }
+    function setMsg(el, text, type) { el.textContent = text || ""; el.className = "msg" + (type ? " " + type : ""); }
+
+    // 5 个系列各自的形状（原创几何造型）。
+    function petArt(sp) {
+      const C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d" };
+      const c = C[sp] || C.st;
+      const eyes = '<circle cx="41" cy="50" r="6" fill="#fff"/><circle cx="59" cy="50" r="6" fill="#fff"/><circle cx="41.5" cy="51" r="2.6" fill="#15161a"/><circle cx="59.5" cy="51" r="2.6" fill="#15161a"/>';
+      const smile = '<path d="M43 62 Q50 68 57 62" stroke="#15161a" stroke-width="2.4" fill="none" stroke-linecap="round"/>';
+      let inner = "";
+      if (sp === "esp") {
+        let bot = ""; for (let x = 28; x <= 68; x += 8) bot += '<rect x="' + x + '" y="78" width="5" height="6" rx="1" fill="#caa23f"/>';
+        inner = '<g stroke="' + c + '" stroke-width="2.6" fill="none" stroke-linecap="round"><path d="M32 24 Q50 14 68 24"/><path d="M38 28 Q50 21 62 28"/></g><circle cx="50" cy="31" r="2" fill="' + c + '"/>'
+          + bot + '<rect x="24" y="32" width="52" height="48" rx="12" fill="' + c + '"/>'
+          + '<rect x="57" y="38" width="13" height="15" rx="2" fill="#15161a" opacity="0.16"/>' + eyes + smile;
+      } else if (sp === "linux") {
+        inner = '<rect x="18" y="26" width="64" height="52" rx="11" fill="' + c + '"/>'
+          + '<rect x="18" y="26" width="64" height="14" rx="11" fill="#000" opacity="0.28"/>'
+          + '<circle cx="28" cy="33" r="2.3" fill="#ff5f56"/><circle cx="36" cy="33" r="2.3" fill="#ffbd2e"/><circle cx="44" cy="33" r="2.3" fill="#27c93f"/>'
+          + '<text x="33" y="64" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-weight="800" font-size="20" fill="#7CFC9B">&gt;_</text>'
+          + '<rect x="60" y="50" width="9" height="15" fill="#7CFC9B" opacity="0.9"/>';
+      } else if (sp === "arm") {
+        inner = '<polygon points="50,16 82,34 82,66 50,84 18,66 18,34" fill="' + c + '"/>'
+          + '<polygon points="50,16 82,34 82,66 50,84 18,66 18,34" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.22"/>'
+          + eyes + '<g fill="none" stroke="#fff" stroke-width="2.2" opacity="0.95"><circle cx="50" cy="65" r="7"/><circle cx="50" cy="65" r="2.6"/></g>';
+      } else if (sp === "sensor") {
+        inner = '<line x1="50" y1="26" x2="50" y2="13" stroke="' + c + '" stroke-width="3"/><circle cx="50" cy="11" r="3.6" fill="' + c + '"/>'
+          + '<circle cx="50" cy="57" r="30" fill="' + c + '"/>'
+          + '<circle cx="50" cy="57" r="16" fill="#fff"/><circle cx="50" cy="57" r="10" fill="' + c + '"/><circle cx="50" cy="57" r="4" fill="#15161a"/><circle cx="54" cy="52" r="1.8" fill="#fff"/>';
+      } else { // st
+        let legs = ""; [34, 50, 66].forEach((y) => { legs += '<rect x="12" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/><rect x="79" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/>'; });
+        inner = legs + '<rect x="22" y="22" width="56" height="56" rx="13" fill="' + c + '"/>'
+          + '<path d="M44 22 a6 6 0 0 0 12 0" fill="#15161a" opacity="0.22"/>'
+          + '<text x="50" y="40" text-anchor="middle" font-family="Georgia,serif" font-weight="800" font-size="12" fill="#fff">ST</text>'
+          + eyes + smile;
+      }
+      return '<svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' + inner + "</svg>";
+    }
+
+    const RETRY = [1500,2500,4000,6000,8000,10000];
+    const COLD = new Set([502,503,504]);
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function api(path, options = {}, { retries = 6, onWaking } = {}) {
+      let last;
+      for (let a = 0; ; a++) {
+        try {
+          const res = await fetch(API_BASE + path, options);
+          const raw = await res.text(); let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+          if (COLD.has(res.status) && data === null && a < retries) { if (onWaking) onWaking(a+1); await delay(RETRY[Math.min(a,RETRY.length-1)]); continue; }
+          return { ok: res.ok, status: res.status, data };
+        } catch (e) { last = e; if (a < retries) { if (onWaking) onWaking(a+1); await delay(RETRY[Math.min(a,RETRY.length-1)]); continue; } throw last; }
+      }
+    }
+    async function loggedIn() {
+      const v = token(VISITOR_KEY), a = token(ADMIN_KEY);
+      try {
+        if (v) { const r = await api("/api/access/verify", { headers: accessHeaders() }); if (r.ok && r.data && r.data.authenticated) return "visitor"; localStorage.removeItem(VISITOR_KEY); }
+        if (a) { const r = await api("/api/auth/verify", { headers: accessHeaders() }); if (r.ok && r.data && r.data.authenticated) return "admin"; localStorage.removeItem(ADMIN_KEY); }
+      } catch {}
+      return null;
+    }
+
+    function petCardHtml(p) {
+      const meta = SPECIES[p.species] || SPECIES.st;
+      const pct = Math.min(100, Math.round((p.exp / (p.need || 1)) * 100));
+      return `
+        <article class="pet-card" data-id="${escapeHtml(p.id)}">
+          <div class="pet-art">${petArt(p.species)}</div>
+          <div class="pet-name">${escapeHtml(p.name)}</div>
+          <div class="pet-sp">${escapeHtml(meta.label)}</div>
+          <div class="pet-lv">Lv.${p.level} · ${p.exp}/${p.need} EXP</div>
+          <div class="exp-bar"><div class="exp-fill" style="width:${pct}%"></div></div>
+          <div class="pet-actions">
+            <button type="button" class="button button-secondary" data-act="feed">🍚 喂食</button>
+            <button type="button" class="button button-secondary" data-act="play">🎾 玩耍</button>
+            <button type="button" class="button button-primary" data-act="train">🏋 训练</button>
+          </div>
+          <div class="pet-foot">
+            <button type="button" class="button button-ghost" data-act="rename">改名</button>
+            <button type="button" class="button button-ghost button-danger" data-act="release">放生</button>
+          </div>
+          <div class="msg" data-msg style="min-height:auto;margin-top:6px;"></div>
+        </article>`;
+    }
+
+    let pets = [];
+    function renderPets() {
+      const wrap = document.getElementById("pets");
+      wrap.innerHTML = pets.length ? pets.map(petCardHtml).join("") : `<div class="empty">还没有宠物，点上方「🎲 随机领养」领一只吧。</div>`;
+      document.getElementById("adopt-btn").disabled = pets.length >= 6;
+    }
+    function renderDex() {
+      document.getElementById("dex").innerHTML = Object.keys(SPECIES).map((k) =>
+        `<div class="dex-card"><div class="dex-art">${petArt(k)}</div><div class="t">${escapeHtml(SPECIES[k].label)}</div><div class="d">${escapeHtml(SPECIES[k].desc)}</div></div>`
+      ).join("");
+    }
+
+    async function loadPets() {
+      const wrap = document.getElementById("pets");
+      wrap.innerHTML = `<div class="loading">加载中…</div>`;
+      try {
+        const r = await api("/api/pets", { headers: accessHeaders() }, { onWaking: (n) => { wrap.innerHTML = `<div class="loading">服务器正在唤醒，请稍候…（第 ${n} 次）</div>`; } });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) throw new Error((r.data && r.data.message) || "加载失败。");
+        if (r.data && r.data.needsMigration) { wrap.innerHTML = `<div class="error">宠物功能尚未初始化，请联系管理员执行 pets 迁移。</div>`; return; }
+        pets = (r.data && r.data.pets) || [];
+        renderPets();
+      } catch (e) { wrap.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`; }
+    }
+
+    async function adopt() {
+      const nameEl = document.getElementById("adopt-name");
+      const msg = document.getElementById("adopt-msg");
+      const btn = document.getElementById("adopt-btn");
+      const name = nameEl.value.trim();
+      if (!name) { setMsg(msg, "请先给宠物起个名字。", "error"); return; }
+      btn.disabled = true; setMsg(msg, "正在抽取系列…");
+      try {
+        const r = await api("/api/pets", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ name }) });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) { setMsg(msg, (r.data && r.data.message) || "领养失败。", "error"); btn.disabled = false; return; }
+        const meta = SPECIES[r.data.species] || SPECIES.st;
+        setMsg(msg, `🎉 恭喜！你领养到了「${meta.label}」的 ${r.data.name}！`, "success");
+        nameEl.value = "";
+        await loadPets();
+      } catch { setMsg(msg, "网络异常，请稍后再试。", "error"); btn.disabled = false; }
+    }
+
+    async function petAction(card, id, act) {
+      const m = card.querySelector("[data-msg]");
+      if (act === "rename") {
+        const name = prompt("给宠物改个名字：");
+        if (name == null) return;
+        const r = await api("/api/pets/" + encodeURIComponent(id), { method: "PATCH", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ name: name.trim() }) });
+        if (!r.ok) { setMsg(m, (r.data && r.data.message) || "改名失败。", "error"); return; }
+        await loadPets(); return;
+      }
+      if (act === "release") {
+        if (!confirm("确定放生这只宠物吗？此操作不可恢复。")) return;
+        const r = await api("/api/pets/" + encodeURIComponent(id), { method: "DELETE", headers: accessHeaders() });
+        if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
+        await loadPets(); return;
+      }
+      // feed / play / train
+      const r = await api("/api/pets/" + encodeURIComponent(id) + "/action", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: act }) });
+      if (r.status === 401) { window.location.href = "/welcome"; return; }
+      if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
+      // 局部更新该卡片
+      const idx = pets.findIndex((x) => x.id === id);
+      if (idx >= 0) { pets[idx] = r.data.pet; }
+      const fresh = petCardHtml(r.data.pet);
+      const tmp = document.createElement("div"); tmp.innerHTML = fresh;
+      card.replaceWith(tmp.firstElementChild);
+      const newCard = document.querySelector('.pet-card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+      const nm = newCard && newCard.querySelector("[data-msg]");
+      if (nm) setMsg(nm, r.data.leveledUp ? `+${r.data.gained} EXP · 升级啦！🎉` : `+${r.data.gained} EXP`, "success");
+    }
+
+    document.getElementById("adopt-btn").addEventListener("click", adopt);
+    document.getElementById("adopt-name").addEventListener("keydown", (e) => { if (e.key === "Enter") adopt(); });
+    document.getElementById("pets").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]"); if (!btn) return;
+      const card = e.target.closest(".pet-card"); if (!card) return;
+      petAction(card, card.dataset.id, btn.getAttribute("data-act"));
+    });
+
+    (async function init() {
+      const who = await loggedIn();
+      document.getElementById("checking").hidden = true;
+      if (!who) { document.getElementById("auth-gate").hidden = false; return; }
+      document.getElementById("pets-main").hidden = false;
+      renderDex();
+      if (who === "admin") {
+        document.getElementById("pets").innerHTML = `<div class="empty">宠物为普通账号功能，管理员暂不参与领养。</div>`;
+        document.getElementById("adopt-btn").disabled = true;
+        return;
+      }
+      await loadPets();
+    })();
+  </script>
+  <script src="/nav-auth.js" defer></script>
+</body>
+</html>

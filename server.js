@@ -3268,6 +3268,130 @@ app.get("/api/stream", (req, res) => {
   });
 });
 
+// ===== 宠物系统（5 个系列，领养时随机分配）=====
+const PET_SPECIES = ["st", "esp", "linux", "arm", "sensor"];
+const PET_MAX = 6;
+const PET_ACTION_EXP = { feed: 8, play: 12, train: 20 };
+
+function isMissingPetsTable(error) {
+  if (!error) return false;
+  if (error.code === "42P01" || error.code === "PGRST205") return true;
+  return /\bpets\b|does not exist|could not find the table/i.test(`${error.message || ""} ${error.details || ""}`);
+}
+function petGrow(level, exp) {
+  while (level < 99 && exp >= level * 100) { exp -= level * 100; level += 1; }
+  if (level >= 99) { level = 99; exp = Math.min(exp, 99 * 100); }
+  return { level, exp };
+}
+function serializePet(p) {
+  return { id: p.id, species: p.species, name: p.name, level: p.level, exp: p.exp, need: p.level * 100, createdAt: p.created_at };
+}
+
+// 我的宠物列表。
+app.get("/api/pets", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ pets: [] }); // 管理员无宠物
+  try {
+    const { data, error } = await supabase
+      .from("pets").select("*").eq("owner_email", req.visitor.email).order("created_at", { ascending: true });
+    if (error) {
+      if (isMissingPetsTable(error)) return res.json({ pets: [], needsMigration: true });
+      throw error;
+    }
+    return res.json({ pets: (data || []).map(serializePet) });
+  } catch (error) {
+    console.error("List pets failed:", error.message);
+    return res.status(500).json({ message: "加载宠物失败，请稍后再试。" });
+  }
+});
+
+// 领养：系列随机分配，用户只起名字。
+app.post("/api/pets", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再领养。" });
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 1 || name.length > 20) return res.status(400).json({ message: "宠物名字需为 1~20 字。" });
+  try {
+    const { count, error: cErr } = await supabase
+      .from("pets").select("*", { count: "exact", head: true }).eq("owner_email", req.visitor.email);
+    if (cErr) {
+      if (isMissingPetsTable(cErr)) return res.status(409).json({ message: "宠物功能尚未初始化，请先在 Supabase 执行 pets 迁移。", code: "MIGRATION_REQUIRED" });
+      throw cErr;
+    }
+    if ((count || 0) >= PET_MAX) return res.status(400).json({ message: `最多只能拥有 ${PET_MAX} 只宠物。` });
+
+    const species = PET_SPECIES[Math.floor(Math.random() * PET_SPECIES.length)];
+    const { data, error } = await supabase
+      .from("pets").insert({ owner_email: req.visitor.email, species, name }).select("*").single();
+    if (error) {
+      if (isMissingPetsTable(error)) return res.status(409).json({ message: "宠物功能尚未初始化，请先在 Supabase 执行 pets 迁移。", code: "MIGRATION_REQUIRED" });
+      throw error;
+    }
+    return res.status(201).json(serializePet(data));
+  } catch (error) {
+    console.error("Adopt pet failed:", error.message);
+    return res.status(500).json({ message: "领养失败，请稍后再试。" });
+  }
+});
+
+// 互动：喂食 / 玩耍 / 训练 → 加经验、升级。
+app.post("/api/pets/:id/action", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  const action = String(req.body?.action || "").trim();
+  const gain = PET_ACTION_EXP[action];
+  if (!gain) return res.status(400).json({ message: "未知操作。" });
+  if (!hitWindow(forumWriteByEmail, `pet:${req.visitor.email}`, FORUM_WINDOW_MS, 600)) {
+    return res.status(429).json({ message: "互动太频繁，让宠物歇会儿吧。" });
+  }
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("*").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+
+    const grown = petGrow(pet.level, pet.exp + gain);
+    const patch = { level: grown.level, exp: grown.exp };
+    if (action === "feed") patch.last_fed_at = new Date().toISOString();
+    const { data, error: uErr } = await supabase.from("pets").update(patch).eq("id", pet.id).select("*").single();
+    if (uErr) throw uErr;
+    return res.json({ pet: serializePet(data), gained: gain, leveledUp: grown.level > pet.level });
+  } catch (error) {
+    console.error("Pet action failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
+// 改名。
+app.patch("/api/pets/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 1 || name.length > 20) return res.status(400).json({ message: "宠物名字需为 1~20 字。" });
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("owner_email").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+    const { data, error: uErr } = await supabase.from("pets").update({ name }).eq("id", req.params.id).select("*").single();
+    if (uErr) throw uErr;
+    return res.json(serializePet(data));
+  } catch (error) {
+    console.error("Rename pet failed:", error.message);
+    return res.status(500).json({ message: "改名失败，请稍后再试。" });
+  }
+});
+
+// 放生。
+app.delete("/api/pets/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("owner_email").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+    const { error: dErr } = await supabase.from("pets").delete().eq("id", req.params.id);
+    if (dErr) throw dErr;
+    return res.json({ released: true });
+  } catch (error) {
+    console.error("Release pet failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
 // 在帖子下回复（讨论）。
 app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   const actor = await getForumActor(req);
@@ -3465,6 +3589,10 @@ app.get("/u/:username", (req, res) => {
 
 app.get("/messages", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "messages.html"));
+});
+
+app.get("/pets", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "pets.html"));
 });
 
 app.get("/welcome", (req, res) => {
