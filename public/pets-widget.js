@@ -54,12 +54,15 @@
   style.textContent =
     ".pet-fab{position:fixed;left:18px;bottom:18px;z-index:47;width:58px;height:58px;border-radius:50%;background:#fffdf8;border:1px solid #e5dbcf;box-shadow:0 12px 28px rgba(68,48,30,.28);display:flex;align-items:center;justify-content:center;text-decoration:none;transition:transform .16s ease}" +
     ".pet-fab:hover{transform:translateY(-3px) scale(1.06)}" +
-    ".pet-fab .pet-fab-art{width:46px;height:46px;display:block}" +
+    ".pet-fab .pet-fab-art{width:46px;height:46px;display:block;animation:pet-fab-bob 2.6s ease-in-out infinite}" +
+    ".pet-fab:hover .pet-fab-art{animation:pet-fab-wiggle .5s ease}" +
+    "@keyframes pet-fab-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}" +
+    "@keyframes pet-fab-wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}" +
     ".pet-fab .pet-fab-paw{font-size:24px}" +
     ".pet-fab .pet-fab-badge{position:absolute;top:-4px;right:-4px;background:#cc6a2d;color:#fff;border-radius:999px;font:800 11px Georgia,serif;padding:1px 6px;box-shadow:0 4px 10px rgba(204,106,45,.4)}" +
     ".pet-fab .pet-fab-label{position:absolute;left:66px;bottom:16px;white-space:nowrap;background:#15161a;color:#fff;font:700 12px Georgia,serif;padding:6px 10px;border-radius:10px;opacity:0;transform:translateX(-6px);transition:opacity .15s ease,transform .15s ease;pointer-events:none}" +
     ".pet-fab:hover .pet-fab-label{opacity:1;transform:none}" +
-    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}}";
+    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}.pet-fab .pet-fab-art{animation:none}}";
   document.head.appendChild(style);
 
   function render(pets) {

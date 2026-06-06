@@ -46,7 +46,17 @@
 
     .pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
     .pet-card { background: var(--card); border: 1px solid rgba(229,219,207,0.96); border-radius: 18px; box-shadow: var(--shadow); padding: 18px; text-align: center; }
-    .pet-art { width: 110px; height: 110px; margin: 0 auto 6px; }
+    .pet-stage { position: relative; width: 110px; margin: 0 auto 6px; }
+    .pet-art { width: 110px; height: 110px; margin: 0 auto; cursor: pointer; }
+    .pet-art:active { transform: scale(0.96); }
+    .pet-art.bounce { animation: pet-bounce 520ms ease; }
+    @keyframes pet-bounce { 0%,100%{transform:none} 28%{transform:translateY(-12px) scale(1.07)} 52%{transform:translateY(0) scale(0.96)} 74%{transform:translateY(-5px)} }
+    .pet-bubble { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -2px) scale(0.9); margin-bottom: 6px;
+      background: #15161a; color: #fff; font-size: 0.82rem; padding: 6px 11px; border-radius: 12px; white-space: nowrap;
+      opacity: 0; transition: opacity 200ms ease, transform 200ms ease; pointer-events: none; z-index: 3; }
+    .pet-bubble.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    .pet-bubble::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #15161a; }
+    @media (prefers-reduced-motion: reduce) { .pet-art.bounce { animation: none; } .pet-bubble { transition: none; } }
     .pet-name { font-weight: 800; font-size: 1.1rem; }
     .pet-sp { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
     .pet-lv { color: var(--accent-dark); font-weight: 700; font-size: 0.9rem; margin-top: 8px; }
@@ -229,16 +239,20 @@
       const meta = SPECIES[p.species] || SPECIES.st;
       const pct = Math.min(100, Math.round((p.exp / (p.need || 1)) * 100));
       return `
-        <article class="pet-card" data-id="${escapeHtml(p.id)}">
-          <div class="pet-art">${petArt(p.species)}</div>
+        <article class="pet-card" data-id="${escapeHtml(p.id)}" data-species="${escapeHtml(p.species)}">
+          <div class="pet-stage">
+            <div class="pet-bubble" data-bubble hidden></div>
+            <div class="pet-art" data-act="pet" title="摸摸它">${petArt(p.species)}</div>
+          </div>
           <div class="pet-name">${escapeHtml(p.name)}</div>
           <div class="pet-sp">${escapeHtml(meta.label)} ${rarityChip(p.rarity || meta.rarity)}</div>
-          <div class="pet-lv">Lv.${p.level} · ${p.exp}/${p.need} EXP</div>
-          <div class="exp-bar"><div class="exp-fill" style="width:${pct}%"></div></div>
+          <div class="pet-lv" data-lv>Lv.${p.level} · ${p.exp}/${p.need} EXP</div>
+          <div class="exp-bar"><div class="exp-fill" data-exp style="width:${pct}%"></div></div>
           <div class="pet-actions">
             <button type="button" class="button button-secondary" data-act="feed">🍚 喂食</button>
             <button type="button" class="button button-secondary" data-act="play">🎾 玩耍</button>
             <button type="button" class="button button-primary" data-act="train">🏋 训练</button>
+            <button type="button" class="button button-secondary" data-act="pet">🤚 抚摸</button>
           </div>
           <div class="pet-foot">
             <button type="button" class="button button-ghost" data-act="rename">改名</button>
@@ -315,6 +329,44 @@
       } catch { setMsg(msg, "网络异常，请稍后再试。", "error"); btn.disabled = false; }
     }
 
+    // 宠物台词（原创短句）。
+    const LINES = {
+      feed: ["好吃！谢谢你～", "能量补满啦！", "嗯…还想再来一口。", "充电完成 ⚡"],
+      play: ["再来一局！", "玩得好开心～", "你最好玩了！", "接住啦！"],
+      train: ["我又变强了！", "感觉充满力量！", "训练使我进步！", "再练一组！"],
+      pet: ["好舒服～", "最喜欢你了！", "蹭蹭～", "嘿嘿……", "再摸一下嘛。"],
+      levelup: ["升级啦！🎉", "我进化了一点点！", "等级 +1，谢谢你！"],
+    };
+    const SPECIES_LINES = {
+      st: ["时钟同步中…滴答。", "稳如老 MCU。"],
+      esp: ["WiFi 已连接 ✅", "正在云端冲浪～"],
+      linux: ["$ sudo 抱抱", "一切皆文件。"],
+      arm: ["低功耗待命中。", "核心运转良好。"],
+      sensor: ["我看到你啦！👀", "环境数据正常。"],
+      robotarm: ["抓取成功！", "关节已校准。"],
+    };
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function lineFor(act, species, leveledUp) {
+      if (leveledUp) return pick(LINES.levelup);
+      if (act === "pet") { const pool = LINES.pet.concat(SPECIES_LINES[species] || []); return pick(pool); }
+      return pick(LINES[act] || LINES.pet);
+    }
+    function bounce(card) {
+      const art = card.querySelector(".pet-art"); if (!art) return;
+      art.classList.remove("bounce"); void art.offsetWidth; art.classList.add("bounce");
+    }
+    function showBubble(card, text) {
+      const b = card.querySelector("[data-bubble]"); if (!b) return;
+      b.textContent = text; b.hidden = false;
+      requestAnimationFrame(() => b.classList.add("show"));
+      clearTimeout(b._t); b._t = setTimeout(() => { b.classList.remove("show"); setTimeout(() => { b.hidden = true; }, 250); }, 2500);
+    }
+    function updateCardStats(card, p) {
+      const lv = card.querySelector("[data-lv]"); if (lv) lv.textContent = `Lv.${p.level} · ${p.exp}/${p.need} EXP`;
+      const ex = card.querySelector("[data-exp]"); if (ex) ex.style.width = Math.min(100, Math.round((p.exp / (p.need || 1)) * 100)) + "%";
+    }
+
+    let acting = false;
     async function petAction(card, id, act) {
       const m = card.querySelector("[data-msg]");
       if (act === "rename") {
@@ -330,19 +382,22 @@
         if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
         await loadPets(); return;
       }
-      // feed / play / train
-      const r = await api("/api/pets/" + encodeURIComponent(id) + "/action", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: act }) });
-      if (r.status === 401) { window.location.href = "/welcome"; return; }
-      if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
-      // 局部更新该卡片
-      const idx = pets.findIndex((x) => x.id === id);
-      if (idx >= 0) { pets[idx] = r.data.pet; }
-      const fresh = petCardHtml(r.data.pet);
-      const tmp = document.createElement("div"); tmp.innerHTML = fresh;
-      card.replaceWith(tmp.firstElementChild);
-      const newCard = document.querySelector('.pet-card[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
-      const nm = newCard && newCard.querySelector("[data-msg]");
-      if (nm) setMsg(nm, r.data.leveledUp ? `+${r.data.gained} EXP · 升级啦！🎉` : `+${r.data.gained} EXP`, "success");
+      // 互动：feed / play / train / pet —— 原地更新 + 动作 + 台词
+      if (acting) return;
+      acting = true;
+      try {
+        const r = await api("/api/pets/" + encodeURIComponent(id) + "/action", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: act }) });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
+        const idx = pets.findIndex((x) => x.id === id);
+        if (idx >= 0) pets[idx] = r.data.pet;
+        updateCardStats(card, r.data.pet);
+        bounce(card);
+        showBubble(card, lineFor(act, r.data.pet.species, r.data.leveledUp));
+        setMsg(m, r.data.leveledUp ? `+${r.data.gained} EXP · 升级啦！🎉` : `+${r.data.gained} EXP`, "success");
+      } catch {
+        setMsg(m, "网络异常，请稍后再试。", "error");
+      } finally { acting = false; }
     }
 
     document.getElementById("adopt-btn").addEventListener("click", adopt);
