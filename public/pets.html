@@ -56,7 +56,22 @@
       opacity: 0; transition: opacity 200ms ease, transform 200ms ease; pointer-events: none; z-index: 3; }
     .pet-bubble.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
     .pet-bubble::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #15161a; }
-    @media (prefers-reduced-motion: reduce) { .pet-art.bounce { animation: none; } .pet-bubble { transition: none; } }
+    /* 心情好：轻快上下笑；心情很差：低头摇晃哭；肚子饿点击：左右抖（咕咕叫）。 */
+    .pet-art.happy { animation: pet-happy 2.2s ease-in-out infinite; }
+    .pet-art.sad { animation: pet-sad 2.6s ease-in-out infinite; }
+    .pet-art.shake { animation: pet-shake 500ms ease; }
+    @keyframes pet-happy { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+    @keyframes pet-sad { 0%,100%{transform:translateY(0) rotate(-2.5deg)} 50%{transform:translateY(3px) rotate(2.5deg)} }
+    @keyframes pet-shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-4px)} 40%{transform:translateX(4px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+    .tear { position: absolute; top: 52px; width: 7px; height: 9px; background: #7fc4ff; border-radius: 0 60% 60% 60%; transform: rotate(45deg); opacity: 0; pointer-events: none; z-index: 2; }
+    .pet-stage.crying .tear1 { left: 40px; animation: tear-fall 1.4s ease-in infinite; }
+    .pet-stage.crying .tear2 { right: 40px; animation: tear-fall 1.4s ease-in infinite 0.7s; }
+    @keyframes tear-fall { 0%{opacity:0;transform:translateY(0) rotate(45deg)} 20%{opacity:1} 100%{opacity:0;transform:translateY(34px) rotate(45deg)} }
+    @media (prefers-reduced-motion: reduce) {
+      .pet-art.bounce, .pet-art.happy, .pet-art.sad, .pet-art.shake { animation: none; }
+      .pet-stage.crying .tear1, .pet-stage.crying .tear2 { animation: none; opacity: 0.9; }
+      .pet-bubble { transition: none; }
+    }
     .pet-name { font-weight: 800; font-size: 1.1rem; }
     .pet-sp { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
     .pet-lv { color: var(--accent-dark); font-weight: 700; font-size: 0.9rem; margin-top: 8px; }
@@ -239,11 +254,15 @@
     function petCardHtml(p) {
       const meta = SPECIES[p.species] || SPECIES.st;
       const pct = Math.min(100, Math.round((p.exp / (p.need || 1)) * 100));
+      const mood = (typeof p.mood === "number") ? p.mood : 80;
+      const artMood = mood < 25 ? " sad" : (mood >= 70 ? " happy" : "");
+      const cry = mood < 25 ? " crying" : "";
       return `
         <article class="pet-card" data-id="${escapeHtml(p.id)}" data-species="${escapeHtml(p.species)}">
-          <div class="pet-stage">
+          <div class="pet-stage${cry}">
             <div class="pet-bubble" data-bubble hidden></div>
-            <div class="pet-art" data-act="pet" title="摸摸它">${petArt(p.species)}</div>
+            <span class="tear tear1"></span><span class="tear tear2"></span>
+            <div class="pet-art${artMood}" data-act="pet" title="摸摸它">${petArt(p.species)}</div>
           </div>
           <div class="pet-name">${escapeHtml(p.name)}</div>
           <div class="pet-sp">${escapeHtml(meta.label)} ${rarityChip(p.rarity || meta.rarity)}</div>
@@ -357,9 +376,36 @@
     }
     function moodFace(m) { return m >= 80 ? "😄" : m >= 50 ? "🙂" : m >= 25 ? "😕" : "😢"; }
     function moodHtml(m) { m = (typeof m === "number") ? m : 80; return `${moodFace(m)} 心情 ${m}`; }
-    function bounce(card) {
+    const FEED_COOLDOWN_MS = 30 * 60 * 1000;
+    function feedReady(p) { return p && (!p.lastFedAt || (Date.now() - new Date(p.lastFedAt).getTime() >= FEED_COOLDOWN_MS)); }
+    const GROWL_LINES = ["咕…咕～(肚子在叫)", "咕噜咕噜…好饿", "咕～该喂我啦！"];
+    function oneShot(card, cls, ms) {
       const art = card.querySelector(".pet-art"); if (!art) return;
-      art.classList.remove("bounce"); void art.offsetWidth; art.classList.add("bounce");
+      art.classList.remove(cls); void art.offsetWidth; art.classList.add(cls);
+      setTimeout(() => art.classList.remove(cls), ms);
+    }
+    function bounce(card) { oneShot(card, "bounce", 560); }
+    function growl(card) { oneShot(card, "shake", 520); showBubble(card, pick(GROWL_LINES)); playGrowl(); }
+    // 心情决定待机表情：低头哭 / 开心笑 / 普通。
+    function applyMoodState(card, mood) {
+      const art = card.querySelector(".pet-art"); const stage = card.querySelector(".pet-stage");
+      if (!art || !stage) return;
+      art.classList.remove("sad", "happy"); stage.classList.remove("crying");
+      if (mood < 25) { art.classList.add("sad"); stage.classList.add("crying"); }
+      else if (mood >= 70) { art.classList.add("happy"); }
+    }
+    // 「咕咕叫」音效（WebAudio 合成的低频短鸣，无需音频文件）。
+    let _ac;
+    function playGrowl() {
+      try {
+        _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
+        const ac = _ac, t = ac.currentTime;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(72, t); o.frequency.linearRampToValueAtTime(44, t + 0.28);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.07, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+        o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.38);
+      } catch {}
     }
     function showBubble(card, text) {
       const b = card.querySelector("[data-bubble]"); if (!b) return;
@@ -398,11 +444,17 @@
         const r = await api("/api/pets/" + encodeURIComponent(id) + "/action", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: act }) });
         if (r.status === 401) { window.location.href = "/welcome"; return; }
         if (!r.ok) { setMsg(m, (r.data && r.data.message) || "操作失败。", "error"); return; }
+        const hungry = act === "pet" && feedReady(prev);
         const idx = pets.findIndex((x) => x.id === id);
         if (idx >= 0) pets[idx] = r.data.pet;
         updateCardStats(card, r.data.pet);
-        bounce(card);
-        showBubble(card, lineFor(act, r.data.pet.species, r.data.leveledUp, prevMood));
+        if (hungry) {
+          growl(card); // 肚子饿了被点 → 咕咕叫
+        } else {
+          bounce(card);
+          showBubble(card, lineFor(act, r.data.pet.species, r.data.leveledUp, prevMood));
+        }
+        applyMoodState(card, r.data.pet.mood);
         setMsg(m, r.data.leveledUp ? `+${r.data.gained} EXP · 升级啦！🎉` : `+${r.data.gained} EXP`, "success");
       } catch {
         setMsg(m, "网络异常，请稍后再试。", "error");
