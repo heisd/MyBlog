@@ -67,9 +67,14 @@
     .pet-stage.crying .tear1 { left: 40px; animation: tear-fall 1.4s ease-in infinite; }
     .pet-stage.crying .tear2 { right: 40px; animation: tear-fall 1.4s ease-in infinite 0.7s; }
     @keyframes tear-fall { 0%{opacity:0;transform:translateY(0) rotate(45deg)} 20%{opacity:1} 100%{opacity:0;transform:translateY(34px) rotate(45deg)} }
+    .heart { position: absolute; top: 40px; color: #e8506e; font-size: 14px; opacity: 0; pointer-events: none; z-index: 2; }
+    .pet-stage.loving .heart1 { left: 30px; animation: heart-float 1.8s ease-in-out infinite; }
+    .pet-stage.loving .heart2 { right: 30px; animation: heart-float 1.8s ease-in-out infinite 0.9s; }
+    @keyframes heart-float { 0%{opacity:0;transform:translateY(6px) scale(0.7)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-26px) scale(1.1)} }
     @media (prefers-reduced-motion: reduce) {
       .pet-art.bounce, .pet-art.happy, .pet-art.sad, .pet-art.shake { animation: none; }
       .pet-stage.crying .tear1, .pet-stage.crying .tear2 { animation: none; opacity: 0.9; }
+      .pet-stage.loving .heart1, .pet-stage.loving .heart2 { animation: none; opacity: 0.9; }
       .pet-bubble { transition: none; }
     }
     .pet-name { font-weight: 800; font-size: 1.1rem; }
@@ -257,11 +262,13 @@
       const mood = (typeof p.mood === "number") ? p.mood : 80;
       const artMood = mood < 25 ? " sad" : (mood >= 70 ? " happy" : "");
       const cry = mood < 25 ? " crying" : "";
+      const love = mood >= 85 ? " loving" : "";
       return `
         <article class="pet-card" data-id="${escapeHtml(p.id)}" data-species="${escapeHtml(p.species)}">
-          <div class="pet-stage${cry}">
+          <div class="pet-stage${cry}${love}">
             <div class="pet-bubble" data-bubble hidden></div>
             <span class="tear tear1"></span><span class="tear tear2"></span>
+            <span class="heart heart1">❤</span><span class="heart heart2">❤</span>
             <div class="pet-art${artMood}" data-act="pet" title="摸摸它">${petArt(p.species)}</div>
           </div>
           <div class="pet-name">${escapeHtml(p.name)}</div>
@@ -390,9 +397,9 @@
     function applyMoodState(card, mood) {
       const art = card.querySelector(".pet-art"); const stage = card.querySelector(".pet-stage");
       if (!art || !stage) return;
-      art.classList.remove("sad", "happy"); stage.classList.remove("crying");
+      art.classList.remove("sad", "happy"); stage.classList.remove("crying", "loving");
       if (mood < 25) { art.classList.add("sad"); stage.classList.add("crying"); }
-      else if (mood >= 70) { art.classList.add("happy"); }
+      else if (mood >= 70) { art.classList.add("happy"); if (mood >= 85) stage.classList.add("loving"); }
     }
     // 「咕咕叫」音效（WebAudio 合成的低频短鸣，无需音频文件）。
     let _ac;

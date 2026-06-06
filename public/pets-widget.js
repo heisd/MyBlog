@@ -67,7 +67,11 @@
     ".pet-fab-cry{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;background:#cc6a2d;color:#fff;font:800 12px Georgia,serif;padding:5px 10px;border-radius:10px;white-space:nowrap;box-shadow:0 8px 18px rgba(204,106,45,.4);animation:pet-cry 1.4s ease-in-out infinite}" +
     '.pet-fab-cry::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#cc6a2d}' +
     "@keyframes pet-cry{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-3px)}}" +
-    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}.pet-fab .pet-fab-art{animation:none}.pet-fab-cry{animation:none}}";
+    ".pet-fab-sad{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:8px;background:#3f679a;background:#3a6ea5;color:#fff;font:800 12px Georgia,serif;padding:5px 10px;border-radius:10px;white-space:nowrap;box-shadow:0 8px 18px rgba(58,110,165,.4);animation:pet-cry 1.6s ease-in-out infinite}" +
+    '.pet-fab-sad::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#3a6ea5}' +
+    ".pet-fab.sad .pet-fab-art{animation:pet-fab-sadsway 2.8s ease-in-out infinite}" +
+    "@keyframes pet-fab-sadsway{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(2px) rotate(3deg)}}" +
+    "@media (prefers-reduced-motion: reduce){.pet-fab{transition:none}.pet-fab .pet-fab-art{animation:none}.pet-fab-cry,.pet-fab-sad{animation:none}}";
   document.head.appendChild(style);
 
   function showCry(el) {
@@ -76,6 +80,14 @@
     c.className = "pet-fab-cry";
     c.textContent = "🍚 我饿了";
     el.appendChild(c);
+  }
+  function showSad(el) {
+    if (!el || el.querySelector(".pet-fab-sad")) return;
+    el.classList.add("sad");
+    var s = document.createElement("span");
+    s.className = "pet-fab-sad";
+    s.textContent = "😢 想你了…";
+    el.appendChild(s);
   }
   function render(pets) {
     if (document.querySelector(".pet-fab")) return;
@@ -96,8 +108,11 @@
     // 喂食冷却结束 → 冒「我饿了」提醒（已就绪立刻显示，否则到点再显示）。
     if (pets && pets.length) {
       var p0 = pets[0];
-      if (feedReady(p0)) showCry(el);
-      else {
+      if (typeof p0.mood === "number" && p0.mood < 25) {
+        showSad(el); // 心情很差 → 提醒去安慰
+      } else if (feedReady(p0)) {
+        showCry(el);
+      } else {
         var remain = FEED_COOLDOWN_MS - (Date.now() - new Date(p0.lastFedAt).getTime());
         if (remain > 0 && remain <= FEED_COOLDOWN_MS) setTimeout(function () { showCry(el); }, remain + 500);
       }
