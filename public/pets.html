@@ -61,6 +61,7 @@
     .dex-art { width: 84px; height: 84px; margin: 0 auto 6px; }
     .dex-card .t { font-weight: 800; }
     .dex-card .d { color: var(--muted); font-size: 0.82rem; line-height: 1.6; margin-top: 4px; }
+    .rarity { display: inline-block; padding: 1px 8px; border: 1px solid; border-radius: 999px; font-size: 0.72rem; font-weight: 800; }
 
     .pop { font-size: 0.82rem; color: #2f6b30; font-weight: 800; }
     .empty, .error, .loading { background: var(--paper); border: 1px dashed var(--line); border-radius: 16px; padding: 26px; color: var(--muted); text-align: center; line-height: 1.8; }
@@ -99,7 +100,7 @@
       <section class="hero">
         <div class="eyebrow">Pets</div>
         <h1>电子宠物</h1>
-        <p>共有 5 个系列：ST、ESP、Linux、Arm、传感器。领养时<strong>随机分配</strong>一个系列——你负责起名字，并通过喂食、玩耍、训练把它养大。</p>
+        <p>共有 6 个系列：ST、ESP、Linux、Arm、传感器、机械臂。领养时<strong>随机分配</strong>一个系列——你负责起名字，并通过喂食、玩耍、训练把它养大。</p>
       </section>
 
       <section class="panel">
@@ -108,6 +109,11 @@
           <span class="field"><input type="text" id="adopt-name" maxlength="20" placeholder="给它起个名字"></span>
           <button type="button" class="button button-primary" id="adopt-btn">🎲 随机领养</button>
           <span class="msg" id="adopt-msg"></span>
+        </div>
+        <p class="msg" style="margin-top:8px;">系列按稀有度随机：普通最常见，稀有较少，史诗（机械臂）最难抽到。</p>
+        <div class="form-actions" style="margin-top:10px;border-top:1px dashed var(--line);padding-top:14px;">
+          <button type="button" class="button button-secondary" id="checkin-btn">📅 每日签到</button>
+          <span class="msg" id="checkin-msg">每天签到，给你的每只宠物 +30 经验。</span>
         </div>
       </section>
 
@@ -124,12 +130,22 @@
     const VISITOR_KEY = "visitorAccessToken";
     const ADMIN_KEY = "adminToken";
     const SPECIES = {
-      st: { label: "ST 系列", desc: "稳定可靠的单片机精灵，做事一丝不苟。" },
-      esp: { label: "ESP 系列", desc: "自带 WiFi 的联网冲浪手，消息最灵通。" },
-      linux: { label: "Linux 系列", desc: "开源内核出身的全能伙伴，命令行高手。" },
-      arm: { label: "Arm 系列", desc: "低功耗高能效的核心，耐力惊人。" },
-      sensor: { label: "传感器系列", desc: "明察秋毫的小眼睛，感知世界的一切。" },
+      st: { label: "ST 系列", rarity: "common", desc: "稳定可靠的单片机精灵，做事一丝不苟。" },
+      esp: { label: "ESP 系列", rarity: "common", desc: "自带 WiFi 的联网冲浪手，消息最灵通。" },
+      linux: { label: "Linux 系列", rarity: "rare", desc: "开源内核出身的全能伙伴，命令行高手。" },
+      arm: { label: "Arm 系列", rarity: "rare", desc: "低功耗高能效的核心，耐力惊人。" },
+      sensor: { label: "传感器系列", rarity: "common", desc: "明察秋毫的小眼睛，感知世界的一切。" },
+      robotarm: { label: "机械臂系列", rarity: "epic", desc: "灵巧的多关节机械臂，抓取搬运样样精通。" },
     };
+    const RARITY = {
+      common: { label: "普通", color: "#6b625b" },
+      rare: { label: "稀有", color: "#2f6fb0" },
+      epic: { label: "史诗", color: "#7a52c7" },
+    };
+    function rarityChip(r) {
+      const m = RARITY[r] || RARITY.common;
+      return `<span class="rarity" style="color:${m.color};border-color:${m.color}">${m.label}</span>`;
+    }
 
     function token(k) { return localStorage.getItem(k); }
     function accessHeaders(extra) {
@@ -143,7 +159,7 @@
 
     // 5 个系列各自的形状（原创几何造型）。
     function petArt(sp) {
-      const C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d" };
+      const C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d", robotarm: "#4d5b66" };
       const c = C[sp] || C.st;
       const eyes = '<circle cx="41" cy="50" r="6" fill="#fff"/><circle cx="59" cy="50" r="6" fill="#fff"/><circle cx="41.5" cy="51" r="2.6" fill="#15161a"/><circle cx="59.5" cy="51" r="2.6" fill="#15161a"/>';
       const smile = '<path d="M43 62 Q50 68 57 62" stroke="#15161a" stroke-width="2.4" fill="none" stroke-linecap="round"/>';
@@ -167,6 +183,14 @@
         inner = '<line x1="50" y1="26" x2="50" y2="13" stroke="' + c + '" stroke-width="3"/><circle cx="50" cy="11" r="3.6" fill="' + c + '"/>'
           + '<circle cx="50" cy="57" r="30" fill="' + c + '"/>'
           + '<circle cx="50" cy="57" r="16" fill="#fff"/><circle cx="50" cy="57" r="10" fill="' + c + '"/><circle cx="50" cy="57" r="4" fill="#15161a"/><circle cx="54" cy="52" r="1.8" fill="#fff"/>';
+      } else if (sp === "robotarm") {
+        inner = '<g stroke="' + c + '" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="50,60 38,44 56,28"/></g>'
+          + '<g stroke="' + c + '" stroke-width="4.5" fill="none" stroke-linecap="round"><line x1="56" y1="28" x2="66" y2="20"/><line x1="56" y1="28" x2="68" y2="31"/></g>'
+          + '<circle cx="50" cy="60" r="5" fill="#e8b73a"/><circle cx="38" cy="44" r="4.5" fill="#e8b73a"/><circle cx="56" cy="28" r="3.5" fill="#e8b73a"/>'
+          + '<rect x="26" y="62" width="48" height="24" rx="7" fill="' + c + '"/>'
+          + '<rect x="22" y="84" width="56" height="6" rx="3" fill="#3a454e"/>'
+          + '<circle cx="44" cy="73" r="5.5" fill="#fff"/><circle cx="56" cy="73" r="5.5" fill="#fff"/><circle cx="44.5" cy="74" r="2.4" fill="#15161a"/><circle cx="56.5" cy="74" r="2.4" fill="#15161a"/>'
+          + '<path d="M45 81 Q50 86 55 81" stroke="#15161a" stroke-width="2.2" fill="none" stroke-linecap="round"/>';
       } else { // st
         let legs = ""; [34, 50, 66].forEach((y) => { legs += '<rect x="12" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/><rect x="79" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/>'; });
         inner = legs + '<rect x="22" y="22" width="56" height="56" rx="13" fill="' + c + '"/>'
@@ -208,7 +232,7 @@
         <article class="pet-card" data-id="${escapeHtml(p.id)}">
           <div class="pet-art">${petArt(p.species)}</div>
           <div class="pet-name">${escapeHtml(p.name)}</div>
-          <div class="pet-sp">${escapeHtml(meta.label)}</div>
+          <div class="pet-sp">${escapeHtml(meta.label)} ${rarityChip(p.rarity || meta.rarity)}</div>
           <div class="pet-lv">Lv.${p.level} · ${p.exp}/${p.need} EXP</div>
           <div class="exp-bar"><div class="exp-fill" style="width:${pct}%"></div></div>
           <div class="pet-actions">
@@ -232,7 +256,7 @@
     }
     function renderDex() {
       document.getElementById("dex").innerHTML = Object.keys(SPECIES).map((k) =>
-        `<div class="dex-card"><div class="dex-art">${petArt(k)}</div><div class="t">${escapeHtml(SPECIES[k].label)}</div><div class="d">${escapeHtml(SPECIES[k].desc)}</div></div>`
+        `<div class="dex-card"><div class="dex-art">${petArt(k)}</div><div class="t">${escapeHtml(SPECIES[k].label)} ${rarityChip(SPECIES[k].rarity)}</div><div class="d">${escapeHtml(SPECIES[k].desc)}</div></div>`
       ).join("");
     }
 
@@ -246,7 +270,29 @@
         if (r.data && r.data.needsMigration) { wrap.innerHTML = `<div class="error">宠物功能尚未初始化，请联系管理员执行 pets 迁移。</div>`; return; }
         pets = (r.data && r.data.pets) || [];
         renderPets();
+        updateCheckin(!!(r.data && r.data.checkinDone));
       } catch (e) { wrap.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`; }
+    }
+
+    function updateCheckin(done) {
+      const btn = document.getElementById("checkin-btn");
+      btn.disabled = done;
+      btn.textContent = done ? "✅ 今日已签到" : "📅 每日签到";
+    }
+    async function checkin() {
+      const btn = document.getElementById("checkin-btn");
+      const msg = document.getElementById("checkin-msg");
+      btn.disabled = true; setMsg(msg, "签到中…");
+      try {
+        const r = await api("/api/pets/checkin", { method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }) });
+        if (r.status === 401) { window.location.href = "/welcome"; return; }
+        if (r.status === 409) { setMsg(msg, (r.data && r.data.message) || "今天已签到。", ""); updateCheckin(true); return; }
+        if (!r.ok) { setMsg(msg, (r.data && r.data.message) || "签到失败。", "error"); btn.disabled = false; return; }
+        const n = (r.data.pets || []).length;
+        setMsg(msg, n ? `签到成功！为 ${n} 只宠物各 +${r.data.reward} 经验 🎉` : `签到成功！先去领养一只宠物吧。`, "success");
+        updateCheckin(true);
+        await loadPets();
+      } catch { setMsg(msg, "网络异常，请稍后再试。", "error"); btn.disabled = false; }
     }
 
     async function adopt() {
@@ -261,7 +307,9 @@
         if (r.status === 401) { window.location.href = "/welcome"; return; }
         if (!r.ok) { setMsg(msg, (r.data && r.data.message) || "领养失败。", "error"); btn.disabled = false; return; }
         const meta = SPECIES[r.data.species] || SPECIES.st;
-        setMsg(msg, `🎉 恭喜！你领养到了「${meta.label}」的 ${r.data.name}！`, "success");
+        const rm = RARITY[r.data.rarity] || RARITY.common;
+        const spark = r.data.rarity === "epic" ? "✨ 史诗 ✨ " : (r.data.rarity === "rare" ? "✨ 稀有 " : "");
+        setMsg(msg, `🎉 ${spark}恭喜！你领养到了【${rm.label}】「${meta.label}」的 ${r.data.name}！`, "success");
         nameEl.value = "";
         await loadPets();
       } catch { setMsg(msg, "网络异常，请稍后再试。", "error"); btn.disabled = false; }
@@ -298,6 +346,7 @@
     }
 
     document.getElementById("adopt-btn").addEventListener("click", adopt);
+    document.getElementById("checkin-btn").addEventListener("click", checkin);
     document.getElementById("adopt-name").addEventListener("keydown", (e) => { if (e.key === "Enter") adopt(); });
     document.getElementById("pets").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-act]"); if (!btn) return;
@@ -314,6 +363,7 @@
       if (who === "admin") {
         document.getElementById("pets").innerHTML = `<div class="empty">宠物为普通账号功能，管理员暂不参与领养。</div>`;
         document.getElementById("adopt-btn").disabled = true;
+        document.getElementById("checkin-btn").disabled = true;
         return;
       }
       await loadPets();

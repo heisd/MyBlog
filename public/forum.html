@@ -134,6 +134,7 @@
     .author-chip { display: inline-flex; align-items: center; gap: 7px; }
     .detail-head .avatar, .author-lg .avatar { width: 44px; height: 44px; font-size: 1.1rem; }
     .author-bio { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .pet-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; background: rgba(204,106,45,0.12); color: var(--accent-dark); font-size: 0.72rem; font-weight: 700; }
     a.author-link { text-decoration: none; color: inherit; cursor: pointer; }
     a.author-link:hover .author { color: var(--accent-dark); text-decoration: underline; }
     a.author-link:hover .avatar { filter: brightness(0.96); }
@@ -338,6 +339,15 @@
       return `<img class="avatar" src="${escapeHtml(src)}" alt="${escapeHtml(username || "")}" onerror="imgFallback(this)">`;
     }
     function profileHref(username) { return "/u/" + encodeURIComponent(username || ""); }
+    function petTitle(lv) {
+      if (lv >= 50) return "传奇训练师"; if (lv >= 20) return "宠物大师"; if (lv >= 10) return "资深训练师"; if (lv >= 5) return "训练师"; return "见习训练师";
+    }
+    function petBadge(username) {
+      const info = authorsMap[username];
+      const lv = info && info.petLevel;
+      if (!lv) return "";
+      return `<span class="pet-badge" title="宠物训练师">🐾 Lv.${lv} ${petTitle(lv)}</span>`;
+    }
     // 作者名片：有公开资料的链接到 TA 的主页，否则纯文本（如管理员 / 已注销）。
     function authorChip(username) {
       const inner = `${avatarHtml(username)}<span class="author">${escapeHtml(username || "匿名")}</span>`;
@@ -486,7 +496,7 @@
         <article class="post-card" data-id="${escapeHtml(p.id)}" style="--i:${i}">
           <h3>${escapeHtml(p.title)}</h3>
           <div class="post-meta">
-            ${authorChip(p.authorUsername)}
+            ${authorChip(p.authorUsername)}${petBadge(p.authorUsername)}
             <span>${escapeHtml(fmtDate(p.createdAt))}</span>
             <span class="badge">💬 ${p.replyCount || 0}</span>
             ${likeBtnHtml(p)}
@@ -562,6 +572,7 @@
                 ${authorsMap[p.authorUsername]
                   ? `<a class="author-link author" href="${profileHref(p.authorUsername)}">${escapeHtml(p.authorUsername || "匿名")}</a>`
                   : `<span class="author">${escapeHtml(p.authorUsername || "匿名")}</span>`}
+                ${petBadge(p.authorUsername)}
                 <span>${escapeHtml(fmtDate(p.createdAt))}</span>
               </div>
               ${(authorsMap[p.authorUsername] && authorsMap[p.authorUsername].bio) ? `<p class="author-bio">${escapeHtml(authorsMap[p.authorUsername].bio)}</p>` : ""}
@@ -576,7 +587,7 @@
       return `
         <div class="reply" data-reply="${escapeHtml(r.id)}">
           <div class="reply-meta">
-            ${authorChip(r.authorUsername)}
+            ${authorChip(r.authorUsername)}${petBadge(r.authorUsername)}
             <span>${escapeHtml(fmtDate(r.createdAt))}</span>
             ${r.canDelete ? `<button type="button" class="button button-ghost button-danger" data-del-reply="${escapeHtml(r.id)}" style="padding:2px 8px;">删除</button>` : ""}
           </div>

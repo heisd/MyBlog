@@ -7,7 +7,7 @@
   if (document.querySelector(".pet-fab")) return; // 防重复注入
 
   function petArt(sp) {
-    var C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d" };
+    var C = { st: "#2f6fb0", esp: "#1f9e8f", linux: "#33333d", arm: "#7a52c7", sensor: "#cc6a2d", robotarm: "#4d5b66" };
     var c = C[sp] || C.st;
     var eyes = '<circle cx="41" cy="50" r="6" fill="#fff"/><circle cx="59" cy="50" r="6" fill="#fff"/><circle cx="41.5" cy="51" r="2.6" fill="#15161a"/><circle cx="59.5" cy="51" r="2.6" fill="#15161a"/>';
     var smile = '<path d="M43 62 Q50 68 57 62" stroke="#15161a" stroke-width="2.4" fill="none" stroke-linecap="round"/>';
@@ -31,6 +31,14 @@
       inner = '<line x1="50" y1="26" x2="50" y2="13" stroke="' + c + '" stroke-width="3"/><circle cx="50" cy="11" r="3.6" fill="' + c + '"/>'
         + '<circle cx="50" cy="57" r="30" fill="' + c + '"/>'
         + '<circle cx="50" cy="57" r="16" fill="#fff"/><circle cx="50" cy="57" r="10" fill="' + c + '"/><circle cx="50" cy="57" r="4" fill="#15161a"/><circle cx="54" cy="52" r="1.8" fill="#fff"/>';
+    } else if (sp === "robotarm") {
+      inner = '<g stroke="' + c + '" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="50,60 38,44 56,28"/></g>'
+        + '<g stroke="' + c + '" stroke-width="4.5" fill="none" stroke-linecap="round"><line x1="56" y1="28" x2="66" y2="20"/><line x1="56" y1="28" x2="68" y2="31"/></g>'
+        + '<circle cx="50" cy="60" r="5" fill="#e8b73a"/><circle cx="38" cy="44" r="4.5" fill="#e8b73a"/><circle cx="56" cy="28" r="3.5" fill="#e8b73a"/>'
+        + '<rect x="26" y="62" width="48" height="24" rx="7" fill="' + c + '"/>'
+        + '<rect x="22" y="84" width="56" height="6" rx="3" fill="#3a454e"/>'
+        + '<circle cx="44" cy="73" r="5.5" fill="#fff"/><circle cx="56" cy="73" r="5.5" fill="#fff"/><circle cx="44.5" cy="74" r="2.4" fill="#15161a"/><circle cx="56.5" cy="74" r="2.4" fill="#15161a"/>'
+        + '<path d="M45 81 Q50 86 55 81" stroke="#15161a" stroke-width="2.2" fill="none" stroke-linecap="round"/>';
     } else {
       var legs = ""; [34, 50, 66].forEach(function (y) { legs += '<rect x="12" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/><rect x="79" y="' + y + '" width="9" height="6" rx="1.5" fill="#caa23f"/>'; });
       inner = legs + '<rect x="22" y="22" width="56" height="56" rx="13" fill="' + c + '"/>'

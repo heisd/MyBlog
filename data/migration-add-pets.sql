@@ -12,3 +12,6 @@ create table if not exists pets (
 );
 
 create index if not exists pets_owner_idx on pets (owner_email, created_at);
+
+-- 每日签到时间（每人每天一次，给宠物加经验）。
+alter table visitors add column if not exists last_checkin_at timestamptz;
