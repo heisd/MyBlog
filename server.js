@@ -848,13 +848,24 @@ async function fetchAuthorProfiles(emails) {
   try {
     const { data, error } = await supabase
       .from("visitors")
-      .select("username, avatar_url, bio")
+      .select("email, username, avatar_url, bio")
       .in("email", uniq);
     if (error) return {};
     const map = {};
+    const emailToUser = {};
     for (const v of data || []) {
-      if (v.username) map[v.username] = { avatar: v.avatar_url || null, bio: v.bio || null };
+      if (v.username) { map[v.username] = { avatar: v.avatar_url || null, bio: v.bio || null, petLevel: 0 }; emailToUser[v.email] = v.username; }
     }
+    // 作者宠物最高等级（用于论坛头像旁的训练师称号小挂件）。
+    try {
+      const { data: pets } = await supabase.from("pets").select("owner_email, level").in("owner_email", uniq);
+      if (Array.isArray(pets)) {
+        for (const p of pets) {
+          const u = emailToUser[p.owner_email];
+          if (u && map[u] && p.level > map[u].petLevel) map[u].petLevel = p.level;
+        }
+      }
+    } catch {}
     return map;
   } catch {
     return {};
@@ -2806,6 +2817,12 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
     } catch {}
     const isMutual = isFollowing && followsYou;
 
+    let petLevel = 0;
+    try {
+      const { data: petRows } = await supabase.from("pets").select("level").eq("owner_email", v.email);
+      if (Array.isArray(petRows)) for (const p of petRows) if (p.level > petLevel) petLevel = p.level;
+    } catch {}
+
     return res.json({
       user: {
         username: v.username,
@@ -2813,6 +2830,7 @@ app.get("/api/users/:username", requireVisitor, async (req, res) => {
         bio: v.bio || null,
         joinedAt: v.created_at || null,
         postCount: posts.length,
+        petLevel,
         totalLikes,
         totalReplies,
         followers,
@@ -3268,6 +3286,215 @@ app.get("/api/stream", (req, res) => {
   });
 });
 
+// ===== 宠物系统（5 个系列，领养时随机分配）=====
+const PET_SPECIES = ["st", "esp", "linux", "arm", "sensor", "robotarm"];
+const PET_MAX = 6;
+const PET_ACTION_EXP = { feed: 8, play: 12, train: 20 };
+// 稀有度 + 随机权重（稀有系列更难抽到）。
+const PET_RARITY = { st: "common", esp: "common", sensor: "common", linux: "rare", arm: "rare", robotarm: "epic" };
+const PET_WEIGHTS = { st: 28, esp: 28, sensor: 24, linux: 9, arm: 8, robotarm: 3 };
+const FEED_COOLDOWN_MS = 30 * 60 * 1000; // 喂食冷却 30 分钟
+const CHECKIN_REWARD = 30;               // 每日签到给每只宠物的经验
+const MOOD_DECAY_PER_HOUR = 4;           // 心情每小时衰减
+const MOOD_GAIN = { feed: 12, play: 15, train: 8, pet: 10 };
+
+// 按距上次心情变化的时间衰减后的当前心情（0-100）。
+function effectiveMood(p) {
+  const base = p && typeof p.mood === "number" ? p.mood : 80;
+  if (!p || !p.mood_at) return Math.max(0, Math.min(100, base));
+  const hours = (Date.now() - new Date(p.mood_at).getTime()) / 3600000;
+  return Math.max(0, Math.min(100, Math.round(base - hours * MOOD_DECAY_PER_HOUR)));
+}
+
+function weightedSpecies() {
+  let total = 0;
+  for (const s of PET_SPECIES) total += PET_WEIGHTS[s] || 1;
+  let r = Math.random() * total;
+  for (const s of PET_SPECIES) { r -= PET_WEIGHTS[s] || 1; if (r < 0) return s; }
+  return PET_SPECIES[0];
+}
+function isMissingPetsTable(error) {
+  if (!error) return false;
+  if (error.code === "42P01" || error.code === "PGRST205") return true;
+  return /\bpets\b|does not exist|could not find the table/i.test(`${error.message || ""} ${error.details || ""}`);
+}
+function petGrow(level, exp) {
+  while (level < 99 && exp >= level * 100) { exp -= level * 100; level += 1; }
+  if (level >= 99) { level = 99; exp = Math.min(exp, 99 * 100); }
+  return { level, exp };
+}
+function serializePet(p) {
+  return {
+    id: p.id, species: p.species, name: p.name, level: p.level, exp: p.exp,
+    need: p.level * 100, rarity: PET_RARITY[p.species] || "common",
+    mood: effectiveMood(p), createdAt: p.created_at, lastFedAt: p.last_fed_at || null,
+  };
+}
+// 今天是否已签到（按 UTC 日期比较）。
+function isSameUtcDay(ts) {
+  if (!ts) return false;
+  return new Date(ts).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+}
+
+// 我的宠物列表。
+app.get("/api/pets", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.json({ pets: [] }); // 管理员无宠物
+  try {
+    const { data, error } = await supabase
+      .from("pets").select("*").eq("owner_email", req.visitor.email).order("created_at", { ascending: true });
+    if (error) {
+      if (isMissingPetsTable(error)) return res.json({ pets: [], needsMigration: true });
+      throw error;
+    }
+    let checkinDone = false;
+    try {
+      const { data: vrow } = await supabase.from("visitors").select("last_checkin_at").eq("email", req.visitor.email).maybeSingle();
+      if (vrow) checkinDone = isSameUtcDay(vrow.last_checkin_at);
+    } catch {}
+    return res.json({ pets: (data || []).map(serializePet), checkinDone });
+  } catch (error) {
+    console.error("List pets failed:", error.message);
+    return res.status(500).json({ message: "加载宠物失败，请稍后再试。" });
+  }
+});
+
+// 领养：系列随机分配，用户只起名字。
+app.post("/api/pets", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请用账号登录后再领养。" });
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 1 || name.length > 20) return res.status(400).json({ message: "宠物名字需为 1~20 字。" });
+  try {
+    const { count, error: cErr } = await supabase
+      .from("pets").select("*", { count: "exact", head: true }).eq("owner_email", req.visitor.email);
+    if (cErr) {
+      if (isMissingPetsTable(cErr)) return res.status(409).json({ message: "宠物功能尚未初始化，请先在 Supabase 执行 pets 迁移。", code: "MIGRATION_REQUIRED" });
+      throw cErr;
+    }
+    if ((count || 0) >= PET_MAX) return res.status(400).json({ message: `最多只能拥有 ${PET_MAX} 只宠物。` });
+
+    const species = weightedSpecies();
+    const { data, error } = await supabase
+      .from("pets").insert({ owner_email: req.visitor.email, species, name }).select("*").single();
+    if (error) {
+      if (isMissingPetsTable(error)) return res.status(409).json({ message: "宠物功能尚未初始化，请先在 Supabase 执行 pets 迁移。", code: "MIGRATION_REQUIRED" });
+      throw error;
+    }
+    return res.status(201).json(serializePet(data));
+  } catch (error) {
+    console.error("Adopt pet failed:", error.message);
+    return res.status(500).json({ message: "领养失败，请稍后再试。" });
+  }
+});
+
+// 互动：喂食 / 玩耍 / 训练 → 加经验、升级。
+app.post("/api/pets/:id/action", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  const action = String(req.body?.action || "").trim();
+  const gain = PET_ACTION_EXP[action];
+  if (!gain) return res.status(400).json({ message: "未知操作。" });
+  if (!hitWindow(forumWriteByEmail, `pet:${req.visitor.email}`, FORUM_WINDOW_MS, 600)) {
+    return res.status(429).json({ message: "互动太频繁，让宠物歇会儿吧。" });
+  }
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("*").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+
+    // 喂食冷却。
+    if (action === "feed" && pet.last_fed_at) {
+      const elapsed = Date.now() - new Date(pet.last_fed_at).getTime();
+      if (elapsed < FEED_COOLDOWN_MS) {
+        const remainMin = Math.max(1, Math.ceil((FEED_COOLDOWN_MS - elapsed) / 60000));
+        return res.status(429).json({ message: `宠物还不饿，约 ${remainMin} 分钟后再喂吧。`, code: "FEED_COOLDOWN" });
+      }
+    }
+
+    const grown = petGrow(pet.level, pet.exp + gain);
+    const patch = { level: grown.level, exp: grown.exp };
+    if (action === "feed") patch.last_fed_at = new Date().toISOString();
+    patch.mood = Math.max(0, Math.min(100, effectiveMood(pet) + (MOOD_GAIN[action] || 5)));
+    patch.mood_at = new Date().toISOString();
+    let { data, error: uErr } = await supabase.from("pets").update(patch).eq("id", pet.id).select("*").single();
+    if (uErr && isMissingColumn(uErr)) { // mood 列未迁移时去掉再存
+      const { mood, mood_at, ...base } = patch;
+      ({ data, error: uErr } = await supabase.from("pets").update(base).eq("id", pet.id).select("*").single());
+    }
+    if (uErr) throw uErr;
+    return res.json({ pet: serializePet(data), gained: gain, leveledUp: grown.level > pet.level });
+  } catch (error) {
+    console.error("Pet action failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
+// 改名。
+app.patch("/api/pets/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 1 || name.length > 20) return res.status(400).json({ message: "宠物名字需为 1~20 字。" });
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("owner_email").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+    const { data, error: uErr } = await supabase.from("pets").update({ name }).eq("id", req.params.id).select("*").single();
+    if (uErr) throw uErr;
+    return res.json(serializePet(data));
+  } catch (error) {
+    console.error("Rename pet failed:", error.message);
+    return res.status(500).json({ message: "改名失败，请稍后再试。" });
+  }
+});
+
+// 放生。
+app.delete("/api/pets/:id", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  try {
+    const { data: pet, error } = await supabase.from("pets").select("owner_email").eq("id", req.params.id).maybeSingle();
+    if (error) { if (isMissingPetsTable(error)) return res.status(404).json({ message: "宠物不存在。" }); throw error; }
+    if (!pet || pet.owner_email !== req.visitor.email) return res.status(404).json({ message: "宠物不存在。" });
+    const { error: dErr } = await supabase.from("pets").delete().eq("id", req.params.id);
+    if (dErr) throw dErr;
+    return res.json({ released: true });
+  } catch (error) {
+    console.error("Release pet failed:", error.message);
+    return res.status(500).json({ message: "操作失败，请稍后再试。" });
+  }
+});
+
+// 每日签到：每天一次，给自己的每只宠物加经验。
+app.post("/api/pets/checkin", requireVisitor, async (req, res) => {
+  if (!req.visitor) return res.status(403).json({ message: "请登录。" });
+  try {
+    let { data: vrow, error: vErr } = await supabase
+      .from("visitors").select("last_checkin_at").eq("email", req.visitor.email).maybeSingle();
+    if (vErr) {
+      if (isMissingColumn(vErr)) return res.status(409).json({ message: "请先在 Supabase 执行 visitors.last_checkin_at 迁移。", code: "MIGRATION_REQUIRED" });
+      throw vErr;
+    }
+    if (vrow && isSameUtcDay(vrow.last_checkin_at)) {
+      return res.status(409).json({ message: "今天已经签到过啦，明天再来～", code: "ALREADY" });
+    }
+    const { error: uErr } = await supabase.from("visitors").update({ last_checkin_at: new Date().toISOString() }).eq("email", req.visitor.email);
+    if (uErr) {
+      if (isMissingColumn(uErr)) return res.status(409).json({ message: "请先在 Supabase 执行 visitors.last_checkin_at 迁移。", code: "MIGRATION_REQUIRED" });
+      throw uErr;
+    }
+    // 给每只宠物加经验。
+    let pets = [];
+    const { data: petRows, error: pErr } = await supabase.from("pets").select("*").eq("owner_email", req.visitor.email);
+    if (pErr && !isMissingPetsTable(pErr)) throw pErr;
+    for (const p of petRows || []) {
+      const grown = petGrow(p.level, p.exp + CHECKIN_REWARD);
+      const { data: np } = await supabase.from("pets").update({ level: grown.level, exp: grown.exp }).eq("id", p.id).select("*").single();
+      if (np) pets.push(serializePet(np));
+    }
+    return res.json({ checkedIn: true, reward: CHECKIN_REWARD, pets });
+  } catch (error) {
+    console.error("Checkin failed:", error.message);
+    return res.status(500).json({ message: "签到失败，请稍后再试。" });
+  }
+});
+
 // 在帖子下回复（讨论）。
 app.post("/api/forum/posts/:id/replies", requireVisitor, async (req, res) => {
   const actor = await getForumActor(req);
@@ -3465,6 +3692,10 @@ app.get("/u/:username", (req, res) => {
 
 app.get("/messages", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "messages.html"));
+});
+
+app.get("/pets", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "pets.html"));
 });
 
 app.get("/welcome", (req, res) => {

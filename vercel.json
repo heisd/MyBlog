@@ -25,6 +25,10 @@
       "destination": "/messages.html"
     },
     {
+      "source": "/pets",
+      "destination": "/pets.html"
+    },
+    {
       "source": "/welcome",
       "destination": "/welcome.html"
     },

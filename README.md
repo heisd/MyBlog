@@ -95,6 +95,7 @@ ClaudeAboutWeb/
 - `/space`：个人空间（用户自己的写作器，保存草稿或发布到论坛）
 - `/u/:username`：用户公开主页（头像 + 自我介绍 + 创作统计 + 关注 + TA 已发布的文章）
 - `/messages`：私信（与站内用户一对一收发消息）
+- `/pets`：电子宠物（登录后领养，按稀有度随机分配 6 个系列之一并养成）
 - `/contact`：在线留言页（访客可直接给站长发消息）
 - `/admin`：后台管理页
 - `/admin-login`：后台登录页
@@ -249,6 +250,14 @@ ClaudeAboutWeb/
 - 「我的文章」列表可**编辑、删除、在草稿 ↔ 已发布之间一键切换**。
 - **个人资料**：可设置**头像**（浏览器内压缩为 96px 方图存储）与**自我介绍**；头像 / 简介会显示在论坛的帖子与回复处。接口：`GET/POST /api/access/profile`。
 - **公开主页 + 关注**：论坛里点作者名片进入 `/u/:username`（头像 / 简介 / 文章 / 获赞 / 讨论 / 粉丝 / 关注），可**关注 / 取消关注**；个人空间「关注动态」展示所关注作者的最新文章。接口：`GET /api/users/:username`、`POST /api/users/:username/follow`、`GET /api/feed`。关注关系表见 [`data/migration-add-follows.sql`](data/migration-add-follows.sql)。
+- **电子宠物（`/pets`）**：登录后可领养宠物，共 **6 个系列**（ST / ESP / Linux / Arm / 传感器 / 机械臂），每个系列有**各自的形状**（原创几何造型）。
+  - **按稀有度随机分配**：普通（ST/ESP/传感器）> 稀有（Linux/Arm）> 史诗（机械臂），权重不同，史诗最难抽到；领养结果会标出稀有度。
+  - **养成 + 互动**：喂食 / 玩耍 / 训练加经验升级（**喂食有 30 分钟冷却**），点宠物或「🤚 抚摸」可与它互动；互动时宠物会**做动作（弹跳）并冒出台词**（按系列 / 行为随机），升级有庆祝；可改名 / 放生（每人上限 6 只）。
+  - **每日签到**：每天一次，给自己的每只宠物 +30 经验（`POST /api/pets/checkin`，记录在 `visitors.last_checkin_at`）。
+  - **心情值（mood 0-100）+ 表情动作**：随时间衰减、互动后回升；心情很差时宠物会**低头流泪（哭）**并说孤单台词，心情好时**轻快上下笑**，**非常开心（≥85）时头顶冒爱心 ❤️**；台词配套动作（互动弹跳、升级庆祝）。喂食冷却结束后，左下角挂件冒「🍚 我饿了」；**心情很差时挂件会显示「😢 想你了…」并低头摇晃，提醒你去安慰**；**饿着肚子被点击时会「咕咕叫」**（抖动 + 咕咕台词 + WebAudio 合成音效）。
+  - **训练师称号**：宠物最高等级会作为「🐾 Lv.N 称号」小挂件显示在论坛的头像旁与用户主页。
+  - 登录后**每个页面左下角都有浮动宠物挂件**（`public/pets-widget.js`，由 `nav-auth.js` 自动注入；未登录不显示）。
+  - 接口：`GET /api/pets`、`POST /api/pets`（按权重随机）、`POST /api/pets/:id/action`、`POST /api/pets/checkin`、`PATCH /api/pets/:id`、`DELETE /api/pets/:id`。表见 [`data/migration-add-pets.sql`](data/migration-add-pets.sql)。
 - **私信（`/messages`）**：与站内用户一对一收发消息。**需互相关注**才能发送（用户主页仅互关时显示「✉ 私信」）；会话**每 5 秒实时刷新**、列表每 12 秒刷新；消息可**撤回**（发件人，双方移除）或**删除**（仅从自己一侧隐藏，两侧都删则彻底移除）；导航栏带**未读小红点**。接口：`POST /api/messages`（发送，校验互关）、`GET /api/messages`（会话列表）、`GET /api/messages/:username`（会话内容，自动已读，返回 `canMessage`）、`GET /api/messages/unread-count`、`DELETE /api/messages/:id`（`{scope:"recall"|"me"}`）。消息表见 [`data/migration-add-messages.sql`](data/migration-add-messages.sql)。仅普通账号可用（管理员无私信）。
 - 接口：`GET /api/forum/mine`（列出自己的全部文章，含草稿）、`GET /api/forum/mine/:id`（取回可编辑原文）。
 - 实现：帖子用 `status` 字段区分（`draft` / `published`）；论坛公开列表只查 `published`，草稿详情对非作者一律按「不存在」处理。

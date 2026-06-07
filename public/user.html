@@ -118,6 +118,7 @@
       return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
     }
     function imgFallback(el) { el.onerror = null; el.src = AVATAR_PH; }
+    function petTitle(lv) { if (lv >= 50) return "传奇训练师"; if (lv >= 20) return "宠物大师"; if (lv >= 10) return "资深训练师"; if (lv >= 5) return "训练师"; return "见习训练师"; }
     function targetUsername() {
       const q = new URLSearchParams(location.search).get("u");
       if (q) return q;
@@ -156,7 +157,7 @@
           <img class="avatar-lg" src="${escapeHtml(u.avatar || AVATAR_PH)}" alt="${escapeHtml(u.username)}" onerror="imgFallback(this)">
           <div style="flex:1 1 240px;">
             <h1 class="pname">${escapeHtml(u.username)}</h1>
-            <p class="pmeta">${since}活跃创作者</p>
+            <p class="pmeta">${since}${u.petLevel ? `🐾 Lv.${u.petLevel} ${petTitle(u.petLevel)}` : "活跃创作者"}</p>
             <p class="pbio">${u.bio ? escapeHtml(u.bio) : "这位用户还没有填写自我介绍。"}</p>
             <div class="stat-row">
               <span class="stat"><b>${u.postCount || 0}</b><span>文章</span></span>
